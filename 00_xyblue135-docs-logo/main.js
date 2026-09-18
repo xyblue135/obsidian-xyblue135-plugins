@@ -5,7 +5,7 @@
  */
 const { Plugin, Notice, TFile, TFolder, normalizePath } = require("obsidian");
 
-const STYLE_ID = "xyblue135-notes-status-styles";
+const STYLE_ID = "xyblue135-docs-logo-styles";
 const SVG_SIZE = 16;
 
 const COLORS = {
@@ -52,7 +52,7 @@ const LOCK_SVG = `<svg xmlns="http://www.w3.org/2000/svg"
 
 module.exports = class xyblue135NotesStatusPlugin extends Plugin {
   async onload() {
-    this.pluginDir = this.manifest.dir || ".obsidian/plugins/xyblue135-notes-status";
+    this.pluginDir = this.manifest.dir || ".obsidian/plugins/xyblue135-docs-logo";
     this.whitelistPath = normalizePath(`${this.pluginDir}/whitelist.json`);
     this.iconsPath = normalizePath(`${this.pluginDir}/icons.json`);
 

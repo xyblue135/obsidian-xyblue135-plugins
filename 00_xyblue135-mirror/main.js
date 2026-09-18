@@ -16,8 +16,8 @@ const {
 } = require("obsidian");
 
 const DEFAULT_SETTINGS = {
-  notesRoot: "Notes",
-  attachmentsRoot: "z_attachments",
+  notesRoot: "00_docs",
+  attachmentsRoot: "00_assets",
   structureMode: "note",
   fileNameMode: "smart",
   handlePaste: true,
@@ -91,8 +91,8 @@ class MirrorDeleteDialog extends Modal {
     if (this.folderInfo) {
       new Setting(optionsEl)
         .setName("删除附件")
-        .setDesc("将该笔记对应的附件镜像目录移入插件垃圾桶（可在设置页恢复）")
-        .addCheckbox((checkbox) => {
+        .setDesc("将该笔记对应的附件镜像目录移入系统回收站")
+        .addToggle((checkbox) => {
           attachmentCheckbox = checkbox;
           checkbox.setValue(true);
         });
@@ -102,34 +102,37 @@ class MirrorDeleteDialog extends Modal {
     new Setting(optionsEl)
       .setName("删除文档")
       .setDesc("删除这篇 Markdown 笔记本身（移入系统回收站）")
-      .addCheckbox((checkbox) => {
+      .addToggle((checkbox) => {
         documentCheckbox = checkbox;
         checkbox.setValue(true);
       });
 
-    // v2.1.1：按钮放到 Obsidian 模态框标准底部按钮区，避免被内容区域裁剪/压住。
-    this.addButton((btn) =>
-      btn.setButtonText("取消").onClick(() => this.close())
-    );
+    // v2.1.1：按钮放到模态框底部按钮区，避免被内容区域裁剪/压住。
+    // 修复：Modal 没有 addButton 方法（旧写法抛 TypeError，导致按钮不出现、无法确认删除）。
+    const buttonContainer = contentEl.createDiv({
+      cls: "modal-button-container"
+    });
 
-    this.addButton((btn) =>
-      btn
-        .setButtonText("确认删除")
-        .setWarning()
-        .onClick(async () => {
-          const deleteAttachments = attachmentCheckbox
-            ? attachmentCheckbox.getValue()
-            : false;
-          const deleteDocument = documentCheckbox
-            ? documentCheckbox.getValue()
-            : false;
-          this.close();
-          await this.plugin.executeManualDelete(this.file, {
-            deleteAttachments,
-            deleteDocument
-          });
-        })
-    );
+    new ButtonComponent(buttonContainer)
+      .setButtonText("取消")
+      .onClick(() => this.close());
+
+    new ButtonComponent(buttonContainer)
+      .setButtonText("确认删除")
+      .setWarning()
+      .onClick(async () => {
+        const deleteAttachments = attachmentCheckbox
+          ? attachmentCheckbox.getValue()
+          : false;
+        const deleteDocument = documentCheckbox
+          ? documentCheckbox.getValue()
+          : false;
+        this.close();
+        await this.plugin.executeManualDelete(this.file, {
+          deleteAttachments,
+          deleteDocument
+        });
+      });
   }
 
   onClose() {
@@ -142,6 +145,7 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
     await this.migrateLegacyFlatAttachmentRootIfNeeded();
+    await this.migratePluginTrashToSystemTrash();
     this.addSettingTab(new MirrorAttachmentsSettingTab(this.app, this));
 
     // v2.1：手动勾选删除流程进行中时，跳过 delete 事件的自动回收。
@@ -149,8 +153,8 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     // 命中后消费一次即跳过，避免“只勾选删除文档”时附件又被自动回收。
     this.manualDeleteGuard = new Set();
 
-    // v2.0：附件改为单层共享结构：z_attachments/<Markdown 文件名>/。
-    // 不再镜像 Notes 的父目录；不同目录下的同名 Markdown 明确共享同一个附件目录。
+    // v2.0：附件改为单层共享结构：00_assets/<Markdown 文件名>/。
+    // 不再镜像 00_docs 的父目录；不同目录下的同名 Markdown 明确共享同一个附件目录。
     this.app.workspace.onLayoutReady(() => {
       void this.ensureAllNoteFolders().catch((err) => {
         console.error("[xyblue135 私人·附件镜像] initial folder sync failed:", err);
@@ -221,7 +225,7 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     );
 
     // Markdown 仅在“文件名本身发生变化”时处理附件目录。
-    // 单纯移动父目录、重命名 Notes 根目录不会改变 z_attachments/<文件名>/，因此不搬附件。
+    // 单纯移动父目录、重命名 00_docs 根目录不会改变 00_assets/<文件名>/，因此不搬附件。
     // 仍使用串行队列，避免批量重命名时发生并发冲突。
     this.renameSyncQueue = Promise.resolve();
     this.registerEvent(
@@ -241,7 +245,7 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     );
 
     // Markdown 真正删除时按“同名引用计数”决定是否回收附件。
-    // 只要 Vault 中仍有另一篇同名 Markdown，z_attachments/<文件名>/ 就继续保留。
+    // 只要 Vault 中仍有另一篇同名 Markdown，00_assets/<文件名>/ 就继续保留。
     // 只有最后一个同名 Markdown 被删除时，才进入插件自己的可恢复垃圾桶。
     // 注意：手动勾选删除流程（executeManualDelete）会先自行处理附件并置位
     // skipAutoTrash，因此这里必须跳过，避免重复回收。
@@ -378,12 +382,12 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     const loaded = (await this.loadData()) || {};
     this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
 
-    // v2.0.1：新安装统一使用 z_attachments。
+    // v2.0.1：新安装统一使用 00_assets。
     // 若 data.json 来自 v2.0.0 且仍是 attachment，则交给安全迁移函数处理；
     // 不直接改路径，避免旧目录尚未搬迁时先创建一套新的空目录。
     this.legacyFlatRootMigrationNeeded = this.cleanRoot(loaded.attachmentsRoot || "") === "attachment";
 
-    // v2.0：固定使用“单层文件名共享附件目录”：z_attachments/<basename>/。
+    // v2.0：固定使用“单层文件名共享附件目录”：00_assets/<basename>/。
     // 同名 Markdown 共享目录；附件命名继续沿用智能规则。
     let migrated = false;
     if (this.settings.structureMode !== "note") {
@@ -410,7 +414,7 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     if (!this.legacyFlatRootMigrationNeeded) return;
 
     const oldRoot = normalizePath("attachment");
-    const newRoot = normalizePath("z_attachments");
+    const newRoot = normalizePath("00_assets");
     const oldNode = this.app.vault.getAbstractFileByPath(oldRoot);
     const newNode = this.app.vault.getAbstractFileByPath(newRoot);
 
@@ -418,7 +422,7 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     // 继续保留旧配置，并提示用户手动确认，避免覆盖或误归并附件。
     if (oldNode && newNode) {
       new Notice(
-        "xyblue135 私人·附件镜像：同时检测到 attachment 与 z_attachments，已停止自动迁移。请先手动确认数据，再把附件根目录改为 z_attachments。",
+        "xyblue135 私人·附件镜像：同时检测到 attachment 与 00_assets，已停止自动迁移。请先手动确认数据，再把附件根目录改为 00_assets。",
         10000
       );
       return;
@@ -437,10 +441,10 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
         this.settings.attachmentsRoot = newRoot;
         this.legacyFlatRootMigrationNeeded = false;
         await this.saveSettings();
-        new Notice("xyblue135 私人·附件镜像：已将旧 attachment 安全迁移为 z_attachments。", 7000);
+        new Notice("xyblue135 私人·附件镜像：已将旧 attachment 安全迁移为 00_assets。", 7000);
       } catch (err) {
-        console.error("[xyblue135 私人·附件镜像] migrate attachment -> z_attachments failed:", err);
-        new Notice("xyblue135 私人·附件镜像：attachment → z_attachments 自动迁移失败，已保留旧配置和数据。", 10000);
+        console.error("[xyblue135 私人·附件镜像] migrate attachment -> 00_assets failed:", err);
+        new Notice("xyblue135 私人·附件镜像：attachment → 00_assets 自动迁移失败，已保留旧配置和数据。", 10000);
       }
       return;
     }
@@ -449,6 +453,30 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     this.settings.attachmentsRoot = newRoot;
     this.legacyFlatRootMigrationNeeded = false;
     await this.saveSettings();
+  }
+
+  // 一次性迁移：把旧版插件自制垃圾桶整体移入系统回收站，并清空恢复记录。
+  async migratePluginTrashToSystemTrash() {
+    const recycleRoot = this.getRecycleRoot();
+    const recycleNode = this.app.vault.getAbstractFileByPath(recycleRoot);
+
+    if (!(recycleNode instanceof TFolder)) {
+      if (this.settings.recycleHistory && this.settings.recycleHistory.length) {
+        this.settings.recycleHistory = [];
+        await this.saveSettings();
+      }
+      return;
+    }
+
+    try {
+      await this.app.vault.trash(recycleNode, true);
+      this.settings.recycleHistory = [];
+      await this.saveSettings();
+      new Notice("xyblue135 私人·附件镜像：已将旧插件垃圾桶移入系统回收站。", 7000);
+    } catch (err) {
+      console.error("[xyblue135 私人·附件镜像] migrate plugin trash failed:", err);
+      new Notice("xyblue135 私人·附件镜像：旧插件垃圾桶迁移失败，请手动处理。", 10000);
+    }
   }
 
   async saveSettings() {
@@ -493,7 +521,7 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
   }
 
   getAttachmentFolderForBasename(basename) {
-    const attachmentRoot = this.cleanRoot(this.settings.attachmentsRoot) || "z_attachments";
+    const attachmentRoot = this.cleanRoot(this.settings.attachmentsRoot) || "00_assets";
     return normalizePath(`${attachmentRoot}/${basename}`);
   }
 
@@ -597,7 +625,7 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
   }
 
   async auditFolderConsistency() {
-    const attachmentRoot = this.cleanRoot(this.settings.attachmentsRoot) || "z_attachments";
+    const attachmentRoot = this.cleanRoot(this.settings.attachmentsRoot) || "00_assets";
     const notes = this.getManagedMarkdownFiles();
     const groups = new Map();
 
@@ -631,7 +659,7 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
       }
     }
 
-    // 单层模式只把 z_attachments 根目录的直接子目录当作“文章附件目录”。
+    // 单层模式只把 00_assets 根目录的直接子目录当作“文章附件目录”。
     // 文章附件目录内部的子文件夹属于附件内容，不参与结构校验。
     const expectedPaths = new Set(expected.keys());
     const rootFolder = this.app.vault.getAbstractFileByPath(normalizePath(attachmentRoot));
@@ -690,9 +718,9 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     const normalized = normalizePath(notePath);
     const notesRoot = this.cleanRoot(this.settings.notesRoot);
     const attachmentRoot =
-      this.cleanRoot(this.settings.attachmentsRoot) || "z_attachments";
+      this.cleanRoot(this.settings.attachmentsRoot) || "00_assets";
 
-    // 配置了 Notes 根目录时，只管理该目录下的 Markdown，
+    // 配置了 00_docs 根目录时，只管理该目录下的 Markdown，
     // 防止删除附件根目录中的 .md 附件时发生误关联。
     if (notesRoot) {
       return normalized.startsWith(notesRoot + "/");
@@ -715,7 +743,7 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
       return normalized.slice(notesRoot.length + 1);
     }
 
-    // 当前版本按原路径兜底；不添加额外的 Notes 外规则。
+    // 当前版本按原路径兜底；不添加额外的 00_docs 外规则。
     return normalized;
   }
 
@@ -761,7 +789,7 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
 
   getRecycleRoot() {
     const attachmentRoot =
-      this.cleanRoot(this.settings.attachmentsRoot) || "z_attachments";
+      this.cleanRoot(this.settings.attachmentsRoot) || "00_assets";
     return normalizePath(`${attachmentRoot}/_MirrorAttachmentsTrash`);
   }
 
@@ -770,121 +798,6 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     const recycleRoot = this.getRecycleRoot();
     return normalized === recycleRoot || normalized.startsWith(recycleRoot + "/");
   }
-
-  getRecycleRelativePath(originalPath) {
-    const attachmentRoot = normalizePath(
-      this.cleanRoot(this.settings.attachmentsRoot) || "z_attachments"
-    );
-    const normalized = normalizePath(originalPath || "");
-    if (normalized.startsWith(attachmentRoot + "/")) {
-      return normalized.slice(attachmentRoot.length + 1);
-    }
-    return normalized.replace(/^\/+/, "");
-  }
-
-  makeRecycleRecordId() {
-    return `${this.formatTimestamp(Date.now())}-${Math.random().toString(36).slice(2, 8)}`;
-  }
-
-  async moveFolderToPluginRecycle(folder, meta = {}) {
-    if (!(folder instanceof TFolder)) return null;
-
-    const originalPath = normalizePath(folder.path);
-    const attachmentRoot = normalizePath(
-      this.cleanRoot(this.settings.attachmentsRoot) || "z_attachments"
-    );
-
-    if (originalPath === attachmentRoot || this.isRecyclePath(originalPath)) {
-      throw new Error(`拒绝回收受保护目录：${originalPath}`);
-    }
-
-    const id = this.makeRecycleRecordId();
-    const relativePath = this.getRecycleRelativePath(originalPath);
-    const recyclePath = normalizePath(`${this.getRecycleRoot()}/${id}/${relativePath}`);
-
-    await this.ensureFolder(this.parentPath(recyclePath));
-
-    // 使用 Vault.rename 而不是 FileManager.renameFile：
-    // 回收期间不要把仍存在的 Markdown 链接自动改写成垃圾桶路径。
-    await this.app.vault.rename(folder, recyclePath);
-
-    const record = {
-      id,
-      deletedAt: new Date().toISOString(),
-      originalPath,
-      recyclePath,
-      reason: meta.reason || "unknown",
-      notePath: meta.notePath || ""
-    };
-
-    this.settings.recycleHistory = [
-      record,
-      ...(Array.isArray(this.settings.recycleHistory) ? this.settings.recycleHistory : [])
-        .filter((item) => item && item.id !== id)
-    ].slice(0, 1000);
-    await this.saveSettings();
-    return record;
-  }
-
-  getRecycleRecords() {
-    return (Array.isArray(this.settings.recycleHistory) ? this.settings.recycleHistory : [])
-      .filter((item) => item && item.id && item.originalPath && item.recyclePath);
-  }
-
-  async restoreRecycleRecord(id) {
-    const record = this.getRecycleRecords().find((item) => item.id === id);
-    if (!record) return { restored: false, reason: "恢复记录不存在" };
-
-    const source = this.app.vault.getAbstractFileByPath(record.recyclePath);
-    if (!(source instanceof TFolder)) {
-      return { restored: false, reason: "垃圾桶中的源目录已经不存在" };
-    }
-
-    const target = this.app.vault.getAbstractFileByPath(record.originalPath);
-    if (target) {
-      return { restored: false, reason: "原路径已有文件或目录，拒绝覆盖" };
-    }
-
-    await this.ensureFolder(this.parentPath(record.originalPath));
-    await this.app.vault.rename(source, record.originalPath);
-
-    this.settings.recycleHistory = this.getRecycleRecords()
-      .filter((item) => item.id !== id);
-    await this.saveSettings();
-    await this.cleanupEmptyRecycleParents(this.parentPath(record.recyclePath));
-    return { restored: true, record };
-  }
-
-  async restoreAllRecycleRecords() {
-    let restored = 0;
-    const conflicts = [];
-    for (const record of [...this.getRecycleRecords()].reverse()) {
-      try {
-        const result = await this.restoreRecycleRecord(record.id);
-        if (result.restored) restored += 1;
-        else conflicts.push({ record, reason: result.reason });
-      } catch (err) {
-        conflicts.push({
-          record,
-          reason: err && err.message ? err.message : String(err)
-        });
-      }
-    }
-    return { restored, conflicts };
-  }
-
-  async cleanupEmptyRecycleParents(startPath) {
-    const recycleRoot = this.getRecycleRoot();
-    let current = normalizePath(startPath || "");
-    while (current && current !== recycleRoot && current.startsWith(recycleRoot + "/")) {
-      const folder = this.app.vault.getAbstractFileByPath(current);
-      if (!(folder instanceof TFolder) || (folder.children || []).length !== 0) break;
-      const parent = this.parentPath(current);
-      await this.app.vault.delete(folder, true);
-      current = parent;
-    }
-  }
-
 
   async trashFolderSafely(folder) {
     if (!(folder instanceof TFolder)) return false;
@@ -903,7 +816,7 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
 
   async cleanupEmptyAttachmentParents(startPath) {
     const attachmentRoot = normalizePath(
-      this.cleanRoot(this.settings.attachmentsRoot) || "z_attachments"
+      this.cleanRoot(this.settings.attachmentsRoot) || "00_assets"
     );
 
     let current = normalizePath(startPath || "");
@@ -1154,7 +1067,7 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
 
   makeMarkdownLink(createdFile, sourceNote) {
     // 使用以 Obsidian 仓库根目录为基准的绝对路径。
-    // 例如：z_attachments/test/image.png -> /z_attachments/test/image.png
+    // 例如：00_assets/test/image.png -> /00_assets/test/image.png
     const vaultAbsolutePath = `/${normalizePath(createdFile.path).replace(/^\/+/, "")}`;
     const safePath = this.markdownSafePath(vaultAbsolutePath);
     const description = this.escapeAltText(
@@ -1166,7 +1079,7 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
 
     if (shouldEmbed) {
       // 可直接预览的附件（图片 / PDF）使用嵌入语法。
-      // alt 固定为空，保持笔记正文简洁：![](/z_attachments/test/file.ext)
+      // alt 固定为空，保持笔记正文简洁：![](/00_assets/test/file.ext)
       return `![](${safePath})`;
     }
 
@@ -1299,7 +1212,7 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     const basename = this.getNoteBasenameFromPath(notePath);
     const remainingNotes = this.getNotesByBasename(basename, notePath);
     const folderPath = this.getAttachmentFolderForBasename(basename);
-    const attachmentRoot = this.cleanRoot(this.settings.attachmentsRoot) || "z_attachments";
+    const attachmentRoot = this.cleanRoot(this.settings.attachmentsRoot) || "00_assets";
 
     // 共享引用仍存在：只更新“引用关系”，绝不碰附件目录。
     if (remainingNotes.length > 0) {
@@ -1317,13 +1230,10 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     const folder = this.app.vault.getAbstractFileByPath(folderPath);
     if (!(folder instanceof TFolder)) return;
 
-    await this.moveFolderToPluginRecycle(folder, {
-      reason: "last-shared-note-delete",
-      notePath
-    });
+    await this.trashToSystemTrash(folder);
 
     new Notice(
-      `xyblue135 私人·附件镜像：这是最后一篇「${basename}」，共享附件已移入插件垃圾桶\n${folderPath}`,
+      `xyblue135 私人·附件镜像：这是最后一篇「${basename}」，共享附件已移入系统回收站\n${folderPath}`,
       6000
     );
   }
@@ -1421,30 +1331,29 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     new MirrorDeleteDialog(this.app, this, file, folderInfo).open();
   }
 
+  // 附件回收统一走系统回收站（Windows 回收站），不再使用插件自制垃圾桶。
+  async trashToSystemTrash(abstractFile) {
+    await this.app.vault.trash(abstractFile, true);
+  }
+
   async executeManualDelete(file, options) {
     const { deleteAttachments, deleteDocument } = options || {};
     const basename = this.getNoteBasenameFromPath(file.path);
     const folderPath = this.getAttachmentFolderForBasename(basename);
     const attachmentRoot =
-      this.cleanRoot(this.settings.attachmentsRoot) || "z_attachments";
+      this.cleanRoot(this.settings.attachmentsRoot) || "00_assets";
     const folder = this.app.vault.getAbstractFileByPath(folderPath);
     const isProtectedFolder =
       !(folder instanceof TFolder) ||
       normalizePath(folderPath) === normalizePath(attachmentRoot) ||
       this.isRecyclePath(folderPath);
 
-    // 1) 附件：移入插件垃圾桶（可恢复），尊重“同名共享”原则不做强制覆盖。
+    // 1) 附件：移入系统回收站。
     if (deleteAttachments && !isProtectedFolder) {
       try {
-        const remainingNotes = this.getNotesByBasename(basename, file.path);
-        await this.moveFolderToPluginRecycle(folder, {
-          reason: remainingNotes.length
-            ? "user-choose-delete-attachments"
-            : "user-choose-delete-attachments-last",
-          notePath: file.path
-        });
+        await this.trashToSystemTrash(folder);
         new Notice(
-          `xyblue135 私人·附件镜像：附件目录已移入插件垃圾桶\n${folderPath}`,
+          `xyblue135 私人·附件镜像：附件目录已移入系统回收站\n${folderPath}`,
           6000
         );
       } catch (err) {
@@ -1615,15 +1524,15 @@ class MirrorAttachmentsSettingTab extends PluginSettingTab {
     this.createSectionTitle(
       containerEl,
       "1. 存储结构",
-      "附件不再镜像 Notes 父目录，只按 Markdown 文件名建立一层文件夹；同名笔记主动共享。"
+      "附件不再镜像 00_docs 父目录，只按 Markdown 文件名建立一层文件夹；同名笔记主动共享。"
     );
 
     new Setting(containerEl)
       .setName("笔记根目录")
-      .setDesc("被插件管理的 Markdown 根目录，例如 Notes。")
+      .setDesc("被插件管理的 Markdown 根目录，例如 00_docs。")
       .addText((text) =>
         text
-          .setPlaceholder("Notes")
+          .setPlaceholder("00_docs")
           .setValue(this.plugin.settings.notesRoot)
           .onChange(async (value) => {
             this.plugin.settings.notesRoot = value.trim();
@@ -1633,10 +1542,10 @@ class MirrorAttachmentsSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("附件根目录")
-      .setDesc("单层共享附件根目录，建议使用 z_attachments。")
+      .setDesc("单层共享附件根目录，建议使用 00_assets。")
       .addText((text) =>
         text
-          .setPlaceholder("z_attachments")
+          .setPlaceholder("00_assets")
           .setValue(this.plugin.settings.attachmentsRoot)
           .onChange(async (value) => {
             this.plugin.settings.attachmentsRoot = value.trim();
@@ -1652,11 +1561,11 @@ class MirrorAttachmentsSettingTab extends PluginSettingTab {
       text: "单层共享映射规则"
     });
     structureCard.createEl("code", {
-      text: "Notes/A/test.md + Notes/B/test.md  ↔  z_attachments/test/"
+      text: "00_docs/A/test.md + 00_docs/B/test.md  ↔  00_assets/test/"
     });
     structureCard.createEl("p", {
       text:
-        "父目录完全解耦；移动 Notes 子目录不会搬附件。同名文件名视为同一个共享附件组。"
+        "父目录完全解耦；移动 00_docs 子目录不会搬附件。同名文件名视为同一个共享附件组。"
     });
 
     this.createSectionTitle(
@@ -1715,7 +1624,7 @@ class MirrorAttachmentsSettingTab extends PluginSettingTab {
       title: "嵌入式资源",
       tag: "时间戳 + ![]()",
       extensions: "PNG / JPG / JPEG / GIF / WebP / BMP / SVG / AVIF / PDF",
-      example: "![](/z_attachments/test/20260812151230001.png)",
+      example: "![](/00_assets/test/20260812151230001.png)",
       description: "图片和 PDF 使用毫秒级时间戳保存并直接嵌入正文，避免截图类文件名大量重复。",
       className: "is-embed"
     });
@@ -1724,7 +1633,7 @@ class MirrorAttachmentsSettingTab extends PluginSettingTab {
       title: "非嵌入式附件",
       tag: "原文件名 + []()",
       extensions: "ZIP / RAR / 7Z / DOC / DOCX / XLS / XLSX / PPT / PPTX / 其他文件",
-      example: "[项目源码.zip](/z_attachments/test/项目源码.zip)",
+      example: "[项目源码.zip](/00_assets/test/项目源码.zip)",
       description: "压缩包、Office 等保留可读原名；重名自动变为 (1)、(2)…，正文显示完整文件名和扩展名。",
       className: "is-link"
     });
@@ -1750,7 +1659,7 @@ class MirrorAttachmentsSettingTab extends PluginSettingTab {
     });
     linkNote.createEl("strong", { text: "路径规则：" });
     linkNote.appendText(
-      "所有链接均从 Vault 根目录开始，例如 /z_attachments/test/...；移动 Markdown 父目录不会改变附件路径。"
+      "所有链接均从 Vault 根目录开始，例如 /00_assets/test/...；移动 Markdown 父目录不会改变附件路径。"
     );
 
     this.createSectionTitle(
@@ -1834,8 +1743,8 @@ class MirrorAttachmentsSettingTab extends PluginSettingTab {
 
     this.createSectionTitle(
       containerEl,
-      "5. 删除保护与垃圾桶恢复",
-      "删除时先检查同名 Markdown 引用数；只有最后一个引用消失时，才把共享附件目录放入插件垃圾桶。"
+      "5. 删除保护",
+      "删除时先检查同名 Markdown 引用数；只有最后一个引用消失时，才把共享附件目录移入系统回收站。"
     );
 
     new Setting(containerEl)
@@ -1861,45 +1770,6 @@ class MirrorAttachmentsSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
-
-    const recycleActions = new Setting(containerEl)
-      .setName("插件垃圾桶")
-      .setDesc("恢复插件新版本回收的附件目录。恢复时绝不覆盖已有文件或目录。");
-
-    const recyclePanel = containerEl.createDiv({
-      cls: "mirror-attachments-audit-panel"
-    });
-
-    recycleActions.addButton((button) =>
-      button
-        .setButtonText("刷新列表")
-        .onClick(async () => {
-          await this.refreshRecyclePanel(recyclePanel);
-        })
-    );
-
-    recycleActions.addButton((button) =>
-      button
-        .setButtonText("恢复全部")
-        .setCta()
-        .onClick(async () => {
-          button.setDisabled(true);
-          try {
-            const result = await this.plugin.restoreAllRecycleRecords();
-            new Notice(
-              `xyblue135 私人·附件镜像：恢复 ${result.restored} 个目录` +
-                (result.conflicts.length ? `，${result.conflicts.length} 个冲突未覆盖` : ""),
-              7000
-            );
-            await this.refreshRecyclePanel(recyclePanel);
-            await this.refreshAuditPanel(auditPanel);
-          } finally {
-            button.setDisabled(false);
-          }
-        })
-    );
-
-    void this.refreshRecyclePanel(recyclePanel);
 
     this.createSectionTitle(
       containerEl,
@@ -1952,52 +1822,6 @@ class MirrorAttachmentsSettingTab extends PluginSettingTab {
     card.createEl("code", {
       text: options.example
     });
-  }
-
-  async refreshRecyclePanel(panelEl) {
-    panelEl.empty();
-    const records = this.plugin.getRecycleRecords();
-
-    if (!records.length) {
-      panelEl.createEl("div", {
-        cls: "mirror-attachments-audit-summary is-ok",
-        text: "插件垃圾桶为空。"
-      });
-      return;
-    }
-
-    panelEl.createEl("div", {
-      cls: "mirror-attachments-audit-summary is-warning",
-      text: `当前有 ${records.length} 个可恢复目录。`
-    });
-
-    const list = panelEl.createDiv({ cls: "mirror-attachments-recycle-list" });
-    for (const record of records.slice(0, 100)) {
-      const row = list.createDiv({ cls: "mirror-attachments-recycle-row" });
-      const text = row.createDiv({ cls: "mirror-attachments-recycle-text" });
-      text.createEl("strong", { text: record.originalPath });
-      text.createEl("div", {
-        text: `${record.deletedAt || "未知时间"} · ${record.reason || "unknown"}`
-      });
-      const button = row.createEl("button", { text: "恢复" });
-      button.addEventListener("click", async () => {
-        button.disabled = true;
-        try {
-          const result = await this.plugin.restoreRecycleRecord(record.id);
-          if (result.restored) {
-            new Notice(`xyblue135 私人·附件镜像：已恢复\n${record.originalPath}`, 5000);
-          } else {
-            new Notice(`xyblue135 私人·附件镜像：未恢复：${result.reason}`, 7000);
-          }
-          await this.refreshRecyclePanel(panelEl);
-        } catch (err) {
-          console.error("[xyblue135 私人·附件镜像] restore failed:", err);
-          new Notice("xyblue135 私人·附件镜像：恢复失败，请查看控制台。", 7000);
-        } finally {
-          button.disabled = false;
-        }
-      });
-    }
   }
 
   refreshDuplicatePanel(panelEl) {

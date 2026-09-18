@@ -18,7 +18,7 @@
 
 把下面三个文件放入：
 
-`你的仓库/.obsidian/plugins/00_xyblue135-folder-hider/`
+`你的仓库/.obsidian/plugins/00_xyblue135-files-hider/`
 
 - `main.js`
 - `manifest.json`
@@ -39,7 +39,7 @@ npm run build
 
 ```json
 {
-  "hiddenFolders": ["z_attachments"]
+  "hiddenFolders": ["00_assets"]
 }
 ```
 

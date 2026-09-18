@@ -7,14 +7,14 @@ xyblue135 自建的一组 Obsidian 插件（开放源代码），统一在此仓
 
 | 目录（插件 ID） | 显示名 |
 | --- | --- |
-| 00_xyblue135-ai-metadata-demo | xyblue135 · AI 元数据 |
+| 00_xyblue135-metadata-ai | xyblue135 · AI 元数据 |
 | 00_xyblue135-char-count-updater | xyblue135 · 字数与 Token 统计 |
 | 00_xyblue135-code-block-wrap | xyblue135 · 代码块增强 |
-| 00_xyblue135-folder-template-note | xyblue135 · 文件夹模板笔记 |
-| 00_xyblue135-folder-hider | xyblue135 · 文件夹隐藏 |
-| 00_xyblue135-local-image-hover-zoom | xyblue135 · 图片缩放与相框 |
-| 00_xyblue135-mirror-attachments | xyblue135 私人 · 附件镜像 |
-| 00_xyblue135-notes-status | xyblue135 · 笔记状态 |
+| 00_xyblue135-docs-template | xyblue135 · 文件夹模板笔记 |
+| 00_xyblue135-files-hider | xyblue135 · 文件夹隐藏 |
+| 00_xyblue135-image-zoom | xyblue135 · 图片缩放与相框 |
+| 00_xyblue135-mirror | xyblue135 私人 · 附件镜像 |
+| 00_xyblue135-docs-logo | xyblue135 · 笔记状态 |
 
 ## 结构
 

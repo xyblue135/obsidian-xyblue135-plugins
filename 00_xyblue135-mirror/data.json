@@ -1,0 +1,12 @@
+{
+  "notesRoot": "00_docs",
+  "attachmentsRoot": "00_assets",
+  "structureMode": "note",
+  "fileNameMode": "smart",
+  "handlePaste": true,
+  "handleDrop": true,
+  "syncOnNoteRename": true,
+  "deleteAttachmentsWithNote": true,
+  "deleteDialogEnabled": true,
+  "recycleHistory": []
+}

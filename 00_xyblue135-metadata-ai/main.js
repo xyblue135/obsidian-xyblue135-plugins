@@ -9,9 +9,9 @@
  * v0.7.0
  *
  * Features:
- * - Inline AI buttons beside summary_short / summary_long / tags / technical_depth only for the root /Notes whitelist.
+ * - Inline AI buttons beside summary_short / summary_long / tags / technical_depth only for the root /00_docs whitelist.
  * - Up to N technically weighted tags (default cap 7), values only (no hierarchy); fewer valid tags are accepted.
- * - Maintains a local-only tag catalog from Markdown files under Notes/ (never sent to AI).
+ * - Maintains a local-only tag catalog from Markdown files under 00_docs/ (never sent to AI).
  * - Canonicalizes tag casing locally: existing Vault spelling first, built-in/editable technical spellings as fallback.
  * - Keeps only essential persistent state: optional per-field fingerprints and error diagnostics.
  * - Sequential API queue with a visible timeout (default 180s) and request gap (default 30s).
@@ -486,7 +486,7 @@ const DEFAULT_SETTINGS = {
   baseUrl: "http://192.168.3.101:3001/v1",
   apiKey: "",
   model: "auto",
-  whitelistFolder: "Notes",
+  whitelistFolder: "00_docs",
   summaryShortMaxChars: 100,
   summaryLongMaxChars: 300,
   summaryMarkdownCleanupEnabled: false,
@@ -663,32 +663,32 @@ module.exports = class AiMetadataPlugin extends Plugin {
 
     this.addCommand({
       id: "generate-summary",
-      name: "为当前 Notes 笔记生成长摘要 summary_long",
+      name: "为当前 00_docs 笔记生成长摘要 summary_long",
       callback: () => void this.generateForActiveFile("summary_long"),
     });
     this.addCommand({
       id: "generate-summary-short",
-      name: "为当前 Notes 笔记生成短摘要 summary_short",
+      name: "为当前 00_docs 笔记生成短摘要 summary_short",
       callback: () => void this.generateForActiveFile("summary_short"),
     });
     this.addCommand({
       id: "generate-both-summaries",
-      name: "为当前 Notes 笔记同时生成短摘要和长摘要",
+      name: "为当前 00_docs 笔记同时生成短摘要和长摘要",
       callback: () => void this.generateForActiveFile("summaries"),
     });
     this.addCommand({
       id: "generate-tags",
-      name: "为当前 Notes 笔记生成加权标签",
+      name: "为当前 00_docs 笔记生成加权标签",
       callback: () => void this.generateForActiveFile("tags"),
     });
     this.addCommand({
       id: "generate-technical-depth",
-      name: "为当前 Notes 笔记评估技术深度 technical_depth",
+      name: "为当前 00_docs 笔记评估技术深度 technical_depth",
       callback: () => void this.generateForActiveFile("technical_depth"),
     });
     this.addCommand({
       id: "generate-summary-and-tags",
-      name: "为当前 Notes 笔记生成 4 项 AI 元数据",
+      name: "为当前 00_docs 笔记生成 4 项 AI 元数据",
       callback: () => void this.generateForActiveFile("all"),
     });
     this.addCommand({
@@ -970,10 +970,10 @@ module.exports = class AiMetadataPlugin extends Plugin {
   }
 
   normalizeWhitelistFolder() {
-    return String(this.settings.whitelistFolder || "Notes")
+    return String(this.settings.whitelistFolder || "00_docs")
       .trim()
       .replace(/\\/g, "/")
-      .replace(/^\/+|\/+$/g, "") || "Notes";
+      .replace(/^\/+|\/+$/g, "") || "00_docs";
   }
 
   isWhitelisted(file) {
@@ -2751,7 +2751,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
     const folder = this.normalizeFolderPath(folderPath);
     const root = this.normalizeWhitelistFolder();
     if (folder === root) {
-      if (showNotice) new Notice("xyblue135 私人·AI 元数据：请选择 Notes 下的具体子文件夹；根目录不提供‘处理全部待更新’入口");
+      if (showNotice) new Notice("xyblue135 私人·AI 元数据：请选择 00_docs 下的具体子文件夹；根目录不提供‘处理全部待更新’入口");
       return null;
     }
     if (this.autoRunning) {
@@ -3379,9 +3379,9 @@ class AiMetadataSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("白名单目录")
-      .setDesc("默认根目录 /Notes。仅该目录及其子目录中的 .md 显示 AI 图标并参与自动更新。")
+      .setDesc("默认根目录 /00_docs。仅该目录及其子目录中的 .md 显示 AI 图标并参与自动更新。")
       .addText((text) => text.setValue(this.plugin.settings.whitelistFolder).onChange(async (value) => {
-        this.plugin.settings.whitelistFolder = value.trim().replace(/^\/+|\/+$/g, "") || "Notes";
+        this.plugin.settings.whitelistFolder = value.trim().replace(/^\/+|\/+$/g, "") || "00_docs";
         await this.plugin.saveAllData();
         this.plugin.scheduleInjection();
         this.plugin.scheduleTagCatalogRebuild(100);
@@ -3480,7 +3480,7 @@ class AiMetadataSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("自动触发更新")
-      .setDesc("默认关闭。开启后按设定频率扫描 /Notes；关闭会清除下一次定时任务。若自动扫描正在等待 API，也会立即中止该自动任务；手动识别/同步不受影响。")
+      .setDesc("默认关闭。开启后按设定频率扫描 /00_docs；关闭会清除下一次定时任务。若自动扫描正在等待 API，也会立即中止该自动任务；手动识别/同步不受影响。")
       .addToggle((toggle) => toggle.setValue(this.plugin.settings.autoUpdateEnabled).onChange(async (value) => {
         await this.plugin.setAutoUpdateEnabled(value);
         this.display();
@@ -3513,7 +3513,7 @@ class AiMetadataSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("待更新笔记 / 文件夹识别")
-      .setDesc("打开 Obsidian 式可展开目录树：逐层展开 Notes 子文件夹，在目标文件夹右侧直接点击“识别”，并查看具体 Markdown、缺失字段和正文预览。识别会包含该文件夹的子文件夹。")
+      .setDesc("打开 Obsidian 式可展开目录树：逐层展开 00_docs 子文件夹，在目标文件夹右侧直接点击“识别”，并查看具体 Markdown、缺失字段和正文预览。识别会包含该文件夹的子文件夹。")
       .addButton((button) => button.setCta().setButtonText("打开文件夹树").onClick(() => {
         this.plugin.openPendingNotesDashboard();
       }));
@@ -3801,7 +3801,7 @@ class PendingNotesDashboardModal extends Modal {
     const intro = contentEl.createEl("div", { cls: "ai-metadata-pending-intro" });
     intro.setText(this.plugin.settings.statusDoneOnlyEnabled === true
       ? "当前已启用 status 元数据校验：这里只统计并识别 frontmatter 中 status: done 的文章。undone、缺少 status 或其他状态不会进入批量队列；文章内四个 AI 字段的 ✨ 手动生成仍可使用。"
-      : "当前批量范围为全部文章：像 Obsidian 文件管理器一样展开 Notes 子文件夹。每个文件夹右侧的“识别”按钮处理该文件夹及其子文件夹中的待更新 Markdown；文章内四个 AI 字段的 ✨ 只更新对应字段。");
+      : "当前批量范围为全部文章：像 Obsidian 文件管理器一样展开 00_docs 子文件夹。每个文件夹右侧的“识别”按钮处理该文件夹及其子文件夹中的待更新 Markdown；文章内四个 AI 字段的 ✨ 只更新对应字段。");
 
     const toolbar = contentEl.createDiv({ cls: "ai-metadata-pending-toolbar" });
     const expandButton = toolbar.createEl("button", { text: "展开待更新目录" });
@@ -3837,7 +3837,7 @@ class PendingNotesDashboardModal extends Modal {
     }
 
     const status = contentEl.createDiv({ cls: "ai-metadata-pending-loading" });
-    status.setText("正在扫描 Notes…");
+    status.setText("正在扫描 00_docs…");
 
     let data;
     try {

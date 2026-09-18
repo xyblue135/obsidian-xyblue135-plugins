@@ -1,0 +1,9 @@
+{
+  "id": "00_xyblue135-mirror",
+  "name": "xyblue135 私人 · 附件镜像",
+  "version": "2.0.1",
+  "minAppVersion": "1.5.0",
+  "description": "【xyblue135 私人插件】单层共享附件结构：同名 Markdown 共享 00_assets/<文件名>/，使用实时引用计数保护删除，附件删除进入系统回收站。",
+  "author": "xyblue135",
+  "isDesktopOnly": false
+}

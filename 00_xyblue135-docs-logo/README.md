@@ -1,7 +1,7 @@
 # xyblue135 · 笔记状态
 
 > **开源插件**：xyblue135 维护的开放源代码插件，仓库公开、可自由查看与复用。
-> **兼容原则**：插件 ID 保持 `00_xyblue135-notes-status`，升级包不携带 `data.json`，覆盖安装时保留用户本地配置与历史状态。
+> **兼容原则**：插件 ID 保持 `00_xyblue135-docs-logo`，升级包不携带 `data.json`，覆盖安装时保留用户本地配置与历史状态。
 
 维护者：**xyblue135**
 
@@ -29,7 +29,7 @@
 {
   "_comment": "重要：白名单目录及其所有子目录只允许包含文件夹和 .md 文件，不允许放 .jpg、.png、.webp、.gif、.pdf、.zip 等附件。白名单路径自动递归包含全部子目录。",
   "paths": [
-    "Notes"
+    "00_docs"
   ]
 }
 ```
@@ -39,13 +39,13 @@
 ```json
 {
   "paths": [
-    "Notes/运维",
-    "Notes/代码"
+    "00_docs/运维",
+    "00_docs/代码"
   ]
 }
 ```
 
-`Notes/运维/docker` 会自动继承 `Notes/运维` 的白名单资格，不需要重复写。
+`00_docs/运维/docker` 会自动继承 `00_docs/运维` 的白名单资格，不需要重复写。
 
 ## icons.json
 
@@ -54,8 +54,8 @@
 ```json
 {
   "_comment": "仅对白名单路径生效。",
-  "Notes/运维/docker": "./图标存放/运维_docker.svg",
-  "Notes/代码/Python.md": "./图标存放/代码_python.svg"
+  "00_docs/运维/docker": "./图标存放/运维_docker.svg",
+  "00_docs/代码/Python.md": "./图标存放/代码_python.svg"
 }
 ```
 
@@ -123,7 +123,7 @@ visibility: open
 将整个插件目录复制到你的 Vault 插件目录：
 
 ```text
-<Vault>/.obsidian/plugins/00_xyblue135-notes-status/
+<Vault>/.obsidian/plugins/00_xyblue135-docs-logo/
 ```
 
 至少包含：

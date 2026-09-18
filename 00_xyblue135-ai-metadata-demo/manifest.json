@@ -1,9 +1,0 @@
-{
-  "id": "00_xyblue135-ai-metadata-demo",
-  "name": "xyblue135 · AI 元数据",
-  "version": "0.7.0",
-  "minAppVersion": "1.7.2",
-  "description": "【xyblue135 开源插件】使用兼容 OpenAI 的 API 为 Notes 维护 summary_short、summary_long、weighted tags 与 technical_depth；支持 Beta 四项合并生成。",
-  "author": "xyblue135",
-  "isDesktopOnly": true
-}
