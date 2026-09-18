@@ -8,9 +8,11 @@ const {
   PluginSettingTab,
   Setting,
   Notice,
+  Modal,
   TFile,
   TFolder,
-  normalizePath
+  normalizePath,
+  ButtonComponent
 } = require("obsidian");
 
 const DEFAULT_SETTINGS = {
@@ -22,6 +24,8 @@ const DEFAULT_SETTINGS = {
   handleDrop: true,
   syncOnNoteRename: true,
   deleteAttachmentsWithNote: true,
+  // v2.1：删除 Markdown 时弹出“删除附件 / 删除文档”勾选确认对话框（默认全部勾选）。
+  deleteDialogEnabled: true,
   recycleHistory: []
 };
 
@@ -33,11 +37,117 @@ const IMAGE_EXTENSIONS = new Set([
 // 图片和 PDF 使用 ![]()；压缩包、Office 等普通附件使用 []()。
 const EMBED_EXTENSIONS = new Set([...IMAGE_EXTENSIONS, "pdf"]);
 
+// v2.1：删除勾选确认对话框。
+// 两个复选框「删除附件」「删除文档」默认全部勾选；点取消则什么都不删除。
+class MirrorDeleteDialog extends Modal {
+  constructor(app, plugin, file, folderInfo) {
+    super(app);
+    this.plugin = plugin;
+    this.file = file;
+    this.folderInfo = folderInfo;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.addClass("mirror-attachments-delete-modal");
+
+    contentEl.createEl("h3", { text: "删除文件" });
+
+    const infoEl = contentEl.createDiv({
+      cls: "mirror-attachments-delete-info"
+    });
+    infoEl.createEl("div", {
+      cls: "mirror-attachments-delete-path",
+      text: this.file.path
+    });
+
+    if (this.folderInfo) {
+      const attLine = infoEl.createDiv({
+        cls: "mirror-attachments-delete-attachment"
+      });
+      attLine.createSpan({ text: "附件目录：" });
+      attLine.createEl("code", { text: this.folderInfo.path });
+      attLine.createSpan({
+        text: `（${this.folderInfo.fileCount} 个文件）`
+      });
+      if (this.folderInfo.sharedNotes > 0) {
+        infoEl.createDiv({
+          cls: "mirror-attachments-delete-warning",
+          text: `⚠ 仍有 ${this.folderInfo.sharedNotes} 篇同名笔记共享此附件目录，勾选“删除附件”会影响它们。`
+        });
+      }
+    } else {
+      infoEl.createDiv({
+        cls: "mirror-attachments-delete-none",
+        text: "未找到对应的附件镜像目录，本次只能删除文档。"
+      });
+    }
+
+    const optionsEl = contentEl.createDiv({
+      cls: "mirror-attachments-delete-options"
+    });
+
+    let attachmentCheckbox = null;
+    if (this.folderInfo) {
+      new Setting(optionsEl)
+        .setName("删除附件")
+        .setDesc("将该笔记对应的附件镜像目录移入插件垃圾桶（可在设置页恢复）")
+        .addCheckbox((checkbox) => {
+          attachmentCheckbox = checkbox;
+          checkbox.setValue(true);
+        });
+    }
+
+    let documentCheckbox = null;
+    new Setting(optionsEl)
+      .setName("删除文档")
+      .setDesc("删除这篇 Markdown 笔记本身（移入系统回收站）")
+      .addCheckbox((checkbox) => {
+        documentCheckbox = checkbox;
+        checkbox.setValue(true);
+      });
+
+    // v2.1.1：按钮放到 Obsidian 模态框标准底部按钮区，避免被内容区域裁剪/压住。
+    this.addButton((btn) =>
+      btn.setButtonText("取消").onClick(() => this.close())
+    );
+
+    this.addButton((btn) =>
+      btn
+        .setButtonText("确认删除")
+        .setWarning()
+        .onClick(async () => {
+          const deleteAttachments = attachmentCheckbox
+            ? attachmentCheckbox.getValue()
+            : false;
+          const deleteDocument = documentCheckbox
+            ? documentCheckbox.getValue()
+            : false;
+          this.close();
+          await this.plugin.executeManualDelete(this.file, {
+            deleteAttachments,
+            deleteDocument
+          });
+        })
+    );
+  }
+
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
+  }
+}
+
 module.exports = class MirrorAttachmentsPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
     await this.migrateLegacyFlatAttachmentRootIfNeeded();
     this.addSettingTab(new MirrorAttachmentsSettingTab(this.app, this));
+
+    // v2.1：手动勾选删除流程进行中时，跳过 delete 事件的自动回收。
+    // 用 Set 记录“本次手动删除的文档路径”，delete 事件（可能异步触发）
+    // 命中后消费一次即跳过，避免“只勾选删除文档”时附件又被自动回收。
+    this.manualDeleteGuard = new Set();
 
     // v2.0：附件改为单层共享结构：z_attachments/<Markdown 文件名>/。
     // 不再镜像 Notes 的父目录；不同目录下的同名 Markdown 明确共享同一个附件目录。
@@ -133,8 +243,15 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     // Markdown 真正删除时按“同名引用计数”决定是否回收附件。
     // 只要 Vault 中仍有另一篇同名 Markdown，z_attachments/<文件名>/ 就继续保留。
     // 只有最后一个同名 Markdown 被删除时，才进入插件自己的可恢复垃圾桶。
+    // 注意：手动勾选删除流程（executeManualDelete）会先自行处理附件并置位
+    // skipAutoTrash，因此这里必须跳过，避免重复回收。
     this.registerEvent(
       this.app.vault.on("delete", (file) => {
+        // 手动勾选删除流程已自行处理附件：命中守卫则消费并跳过自动回收。
+        if (file && this.manualDeleteGuard.has(file.path)) {
+          this.manualDeleteGuard.delete(file.path);
+          return;
+        }
         if (!this.settings.deleteAttachmentsWithNote) return;
         if (!(file instanceof TFile) || file.extension !== "md") return;
         if (!this.isManagedNotePath(file.path)) return;
@@ -147,9 +264,18 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     );
 
     // 左侧文件树右键 Markdown -> 打开对应附件目录。
+    // v2.1：开启删除确认后，同时把 Obsidian 默认的“删除”项替换为
+    // “删除…（可勾选附件）”，确保取消 = 什么都不删除。
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu, file) => {
         if (!(file instanceof TFile) || file.extension !== "md") return;
+
+        if (
+          this.settings.deleteDialogEnabled &&
+          this.isManagedNotePath(file.path)
+        ) {
+          this.replaceDeleteMenuItems(menu, file);
+        }
 
         menu.addItem((item) => {
           item
@@ -160,6 +286,92 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
         });
       })
     );
+
+    // v2.1：文件树中按 Delete 键删除 Markdown 时，先弹出勾选确认。
+    // 使用 capture 阶段监听并阻止 Obsidian 默认删除动作。
+    const deleteKeyHandler = (event) => {
+      if (!this.settings.deleteDialogEnabled) return;
+      if (event.key !== "Delete") return;
+
+      // 只在文件树容器内生效；编辑器中的 Delete 是删除字符，绝不能拦。
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      const inExplorer =
+        target.closest(".nav-files-container") ||
+        target.closest(".workspace-leaf-content[data-type='file-explorer']") ||
+        target.closest(".tree-item[data-path]");
+      if (!inExplorer) return;
+
+      const files = this.getSelectedExplorerFiles();
+      const mdFiles = files.filter(
+        (f) =>
+          f instanceof TFile &&
+          f.extension === "md" &&
+          this.isManagedNotePath(f.path)
+      );
+      if (!mdFiles.length) return;
+
+      if (mdFiles.length > 1) {
+        new Notice(
+          "xyblue135 私人·附件镜像：暂不支持多选批量删除，请逐个删除。",
+          5000
+        );
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      void this.openDeleteDialog(mdFiles[0]);
+    };
+    document.addEventListener("keydown", deleteKeyHandler, true);
+    this.register(() => {
+      document.removeEventListener("keydown", deleteKeyHandler, true);
+    });
+
+    // v2.1：命令面板 / 快捷键 / 文件树“删除按钮”触发的删除命令统一走勾选确认。
+    // 关键修复：删除命令的目标文件是“文件树中选中的文件”，不是当前打开的笔记。
+    // 之前写死 getActiveFile() 会导致：在文件树点 B 的删除、却用编辑器里打开的
+    // A 当目标，从而弹错文件、甚至吞掉 B 的删除（表现为“删不掉 / 没确认”）。
+    // 这里优先取选中的 Markdown 文件，取不到才回退到活动文件，与 Delete 键逻辑一致。
+    const originalExecuteCommand = this.app.commands.executeCommandById.bind(
+      this.app.commands
+    );
+    this.app.commands.executeCommandById = async (commandId, ...args) => {
+      if (
+        this.settings.deleteDialogEnabled &&
+        typeof commandId === "string" &&
+        /delete-file/.test(commandId)
+      ) {
+        let target = null;
+        const selected = this.getSelectedExplorerFiles();
+        const mdFiles = selected.filter(
+          (f) =>
+            f instanceof TFile &&
+            f.extension === "md" &&
+            this.isManagedNotePath(f.path)
+        );
+        if (mdFiles.length) {
+          target = mdFiles[0];
+        } else {
+          const activeFile = this.app.workspace.getActiveFile();
+          if (
+            activeFile instanceof TFile &&
+            activeFile.extension === "md" &&
+            this.isManagedNotePath(activeFile.path)
+          ) {
+            target = activeFile;
+          }
+        }
+        if (target) {
+          await this.openDeleteDialog(target);
+          return;
+        }
+      }
+      return originalExecuteCommand(commandId, ...args);
+    };
+    this.register(() => {
+      this.app.commands.executeCommandById = originalExecuteCommand;
+    });
   }
 
   async loadSettings() {
@@ -1116,6 +1328,168 @@ module.exports = class MirrorAttachmentsPlugin extends Plugin {
     );
   }
 
+  // ---- v2.1：删除勾选确认流程 ----
+
+  getSelectedExplorerFiles() {
+    try {
+      const leaves = this.app.workspace.getLeavesOfType("file-explorer");
+      for (const leaf of leaves) {
+        const view = leaf && leaf.view;
+        if (view && typeof view.getSelectedFiles === "function") {
+          const files = view.getSelectedFiles();
+          if (Array.isArray(files) && files.length) return files;
+        }
+      }
+    } catch (err) {
+      console.warn("[xyblue135 私人·附件镜像] getSelectedFiles failed:", err);
+    }
+
+    // 兜底：直接从文件树 DOM 读取选中的行。
+    const result = [];
+    document.querySelectorAll(".nav-file-title.is-selected").forEach((el) => {
+      const path = el.getAttribute("data-path");
+      if (!path) return;
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (file instanceof TFile) result.push(file);
+    });
+    return result;
+  }
+
+  replaceDeleteMenuItems(menu, file) {
+    // Obsidian 不同语言/版本下删除项标题不一致，多关键词匹配。
+    const deleteKeywords = [
+      "删除",
+      "回收站",
+      "永久删除",
+      "Move to trash",
+      "Move to system trash",
+      "Delete permanently",
+      "Delete"
+    ];
+    try {
+      const items = menu["items"];
+      if (Array.isArray(items)) {
+        for (let i = items.length - 1; i >= 0; i--) {
+          const item = items[i];
+          if (!item) continue;
+          const title = (
+            (item.titleEl && item.titleEl.textContent) ||
+            item.title ||
+            ""
+          ).trim();
+          if (deleteKeywords.some((keyword) => title.includes(keyword))) {
+            items.splice(i, 1);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(
+        "[xyblue135 私人·附件镜像] replace delete menu item failed:",
+        err
+      );
+    }
+
+    menu.addItem((item) => {
+      item
+        .setTitle("删除…（可勾选附件）")
+        .setIcon("trash")
+        .onClick(() => {
+          void this.openDeleteDialog(file);
+        });
+    });
+  }
+
+  async openDeleteDialog(file) {
+    if (!(file instanceof TFile) || file.extension !== "md") return;
+
+    const basename = this.getNoteBasenameFromPath(file.path);
+    const folderPath = this.getAttachmentFolderForBasename(basename);
+    const folder = this.app.vault.getAbstractFileByPath(folderPath);
+    const sharedNotes = this.getNotesByBasename(basename, file.path);
+
+    const folderInfo =
+      folder instanceof TFolder
+        ? {
+            path: folderPath,
+            fileCount: (folder.children || []).filter(
+              (child) => child instanceof TFile
+            ).length,
+            sharedNotes: sharedNotes.length
+          }
+        : null;
+
+    new MirrorDeleteDialog(this.app, this, file, folderInfo).open();
+  }
+
+  async executeManualDelete(file, options) {
+    const { deleteAttachments, deleteDocument } = options || {};
+    const basename = this.getNoteBasenameFromPath(file.path);
+    const folderPath = this.getAttachmentFolderForBasename(basename);
+    const attachmentRoot =
+      this.cleanRoot(this.settings.attachmentsRoot) || "z_attachments";
+    const folder = this.app.vault.getAbstractFileByPath(folderPath);
+    const isProtectedFolder =
+      !(folder instanceof TFolder) ||
+      normalizePath(folderPath) === normalizePath(attachmentRoot) ||
+      this.isRecyclePath(folderPath);
+
+    // 1) 附件：移入插件垃圾桶（可恢复），尊重“同名共享”原则不做强制覆盖。
+    if (deleteAttachments && !isProtectedFolder) {
+      try {
+        const remainingNotes = this.getNotesByBasename(basename, file.path);
+        await this.moveFolderToPluginRecycle(folder, {
+          reason: remainingNotes.length
+            ? "user-choose-delete-attachments"
+            : "user-choose-delete-attachments-last",
+          notePath: file.path
+        });
+        new Notice(
+          `xyblue135 私人·附件镜像：附件目录已移入插件垃圾桶\n${folderPath}`,
+          6000
+        );
+      } catch (err) {
+        console.error(
+          "[xyblue135 私人·附件镜像] manual delete attachments failed:",
+          err
+        );
+        new Notice(
+          "xyblue135 私人·附件镜像：删除附件失败，请查看控制台。",
+          7000
+        );
+      }
+    }
+
+    // 2) 文档：移入系统回收站。把路径加入守卫集合，delete 事件（可能异步
+    //    触发）命中后跳过自动回收，保证“只勾选删除文档”时附件不被回收。
+    if (deleteDocument) {
+      this.manualDeleteGuard.add(file.path);
+      try {
+        if (
+          this.app.fileManager &&
+          typeof this.app.fileManager.trashFile === "function"
+        ) {
+          await this.app.fileManager.trashFile(file);
+        } else {
+          await this.app.vault.trash(file, false);
+        }
+        new Notice(
+          `xyblue135 私人·附件镜像：已删除文档\n${file.path}`,
+          5000
+        );
+      } catch (err) {
+        this.manualDeleteGuard.delete(file.path);
+        console.error(
+          "[xyblue135 私人·附件镜像] manual delete document failed:",
+          err
+        );
+        new Notice(
+          "xyblue135 私人·附件镜像：删除文档失败，请查看控制台。",
+          7000
+        );
+      }
+    }
+  }
+
   async syncAttachmentFolderAfterRename(newNotePath, oldPath) {
     const oldManaged = this.isManagedNotePath(oldPath);
     const newManaged = this.isManagedNotePath(newNotePath);
@@ -1463,6 +1837,18 @@ class MirrorAttachmentsSettingTab extends PluginSettingTab {
       "5. 删除保护与垃圾桶恢复",
       "删除时先检查同名 Markdown 引用数；只有最后一个引用消失时，才把共享附件目录放入插件垃圾桶。"
     );
+
+    new Setting(containerEl)
+      .setName("删除文章时弹出勾选确认")
+      .setDesc("开启后，在文件树右键删除或按 Delete 键删除 Markdown 时，会先弹出对话框，可分别勾选“删除附件”“删除文档”（默认全部勾选）；点取消则什么都不删除。")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.deleteDialogEnabled)
+          .onChange(async (value) => {
+            this.plugin.settings.deleteDialogEnabled = value;
+            await this.plugin.saveSettings();
+          })
+      );
 
     new Setting(containerEl)
       .setName("删除文章时同步回收附件")

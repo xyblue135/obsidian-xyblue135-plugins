@@ -327,3 +327,39 @@
 .mirror-attachments-recycle-text { min-width: 0; flex: 1; }
 .mirror-attachments-recycle-text strong, .mirror-attachments-recycle-text div { display: block; overflow-wrap: anywhere; }
 .mirror-attachments-recycle-text div { margin-top: 3px; color: var(--text-muted); font-size: var(--font-ui-smaller); }
+
+/* v2.1 删除勾选确认对话框 */
+.mirror-attachments-delete-modal { min-width: min(520px, 90vw); }
+.mirror-attachments-delete-info {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-secondary);
+}
+.mirror-attachments-delete-path { font-weight: 600; overflow-wrap: anywhere; }
+.mirror-attachments-delete-attachment {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  overflow-wrap: anywhere;
+}
+.mirror-attachments-delete-attachment code {
+  margin: 0 4px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--background-primary);
+  font-size: var(--font-ui-smaller);
+}
+.mirror-attachments-delete-warning {
+  margin-top: 8px;
+  color: var(--text-warning);
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+}
+.mirror-attachments-delete-none {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+.mirror-attachments-delete-options { margin-top: 10px; }

@@ -1,8 +1,10 @@
 {
   "wrapEnabled": true,
   "styleMode": "dark",
+  "showCopyBar": false,
   "showToolbarMarker": false,
   "overrideCodeBackground": true,
+  "syntaxHighlight": false,
   "toolbarHeight": 16,
   "copyButtonSize": 16,
   "copyIconSize": 6,
