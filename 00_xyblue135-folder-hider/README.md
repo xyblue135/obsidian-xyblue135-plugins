@@ -1,4 +1,4 @@
-# 文件夹隐藏
+# xyblue135 · 文件夹隐藏
 
 作者：xyblue135
 
@@ -24,7 +24,7 @@
 - `manifest.json`
 - `styles.css`
 
-然后在 Obsidian → 设置 → 第三方插件中启用 **“文件夹隐藏”**。
+然后在 Obsidian → 设置 → 第三方插件中启用 **“xyblue135 · 文件夹隐藏”**。
 
 ### 源码编译
 

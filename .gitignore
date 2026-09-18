@@ -20,3 +20,6 @@ node_modules/
 # 可能含同步地址 / API Key 等凭据。若此仓库未来 push 到 GitHub，务必设为
 # 私有仓库，或先手动清理敏感字段再提交。
 recent-files-obsidian/data.json
+
+# Windows 快捷方式
+*.lnk

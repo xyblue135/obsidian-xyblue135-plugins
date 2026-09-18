@@ -1,6 +1,6 @@
 {
-  "id": "xyblue135-folder-hider",
-  "name": "文件夹隐藏",
+  "id": "00_xyblue135-folder-hider",
+  "name": "xyblue135 · 文件夹隐藏",
   "version": "1.0.0",
   "minAppVersion": "1.5.0",
   "description": "通过右键在文件列表中视觉隐藏指定文件夹；不影响搜索、附件和其他插件访问，被代码主动定位时自动恢复显示。",
