@@ -1,0 +1,28 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Package zip
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          mkdir -p dist
+          zip -r "dist/obsidian-xyblue135-plugins-${VERSION}.zip" . \
+            -x ".git/*" ".github/*" "dist/*"
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip

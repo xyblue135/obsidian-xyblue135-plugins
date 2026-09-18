@@ -1,7 +1,7 @@
 {
   "settings": {
-    "baseUrl": "http://192.168.3.101:3001/v1",
-    "apiKey": "freellmapi-6e9eeb5d40b422c5e067b8fdddfc71a6e54a053383578cbc",
+    "baseUrl": "http://127.0.0.1:31415/v1",
+    "apiKey": "",
     "model": "auto",
     "whitelistFolder": "00_docs",
     "summaryShortMaxChars": 100,
