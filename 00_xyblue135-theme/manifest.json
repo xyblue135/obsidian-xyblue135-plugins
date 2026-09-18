@@ -1,0 +1,9 @@
+{
+  "id": "00_xyblue135-theme",
+  "name": "xyblue135 · 主题",
+  "version": "1.1.0",
+  "minAppVersion": "1.10.0",
+  "description": "【xyblue135 开源插件】无需编写 CSS 片段即可自定义外观：背景、文字、链接、标题 H1-H6、列表、引用、代码、标签等颜色与尺寸。",
+  "author": "xyblue135",
+  "isDesktopOnly": false
+}

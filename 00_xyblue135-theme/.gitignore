@@ -1,0 +1,16 @@
+# npm
+node_modules
+
+# 编译映射文件
+*.map
+
+# 运行时数据（首次运行自动生成）
+data.json
+
+# IDE
+.vscode
+.idea
+*.iml
+
+# macOS
+.DS_Store

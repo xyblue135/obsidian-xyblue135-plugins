@@ -30,5 +30,6 @@
   "00_docs/画面传输": "./图标存放/huamianchuanshu.svg",
 
 
-  "00_docs": "./图标存放/Notes.svg"
+  "00_docs": "./图标存放/00_docs.svg"
+  "00_assets": "./图标存放/00_assets.svg",
 }

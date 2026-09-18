@@ -1,0 +1,29 @@
+.xyblue135-theme-settings .setting-group {
+  margin-top: 1rem;
+}
+
+.xyblue135-theme-settings .extra-setting-button.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.xyblue135-theme-settings .setting-items > .setting-item-heading:first-child {
+  padding-top: 1.5rem;
+}
+
+.xyblue135-theme-settings .xyblue135-theme-base16-textarea {
+  min-width: 22rem;
+  font-family: var(--font-monospace);
+  font-size: var(--font-smaller);
+  resize: vertical;
+}
+
+.xyblue135-theme-offscreen {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}

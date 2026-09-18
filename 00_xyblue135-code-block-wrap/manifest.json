@@ -1,9 +1,0 @@
-{
-  "id": "00_xyblue135-code-block-wrap",
-  "name": "xyblue135 · 代码块增强",
-  "version": "1.2.3",
-  "minAppVersion": "1.5.0",
-  "description": "【xyblue135 开源插件】可配置代码块自动换行、横向滚动、紧凑工具栏、复制按钮、背景颜色、圆角和深色样式。",
-  "author": "xyblue135",
-  "isDesktopOnly": false
-}

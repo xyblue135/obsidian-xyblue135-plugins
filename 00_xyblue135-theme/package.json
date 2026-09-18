@@ -1,0 +1,33 @@
+{
+  "name": "xyblue135-theme",
+  "version": "1.1.0",
+  "description": "Appearance customization without CSS snippets. Modify colors, text sizing/spacing, and more.",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "lint": "eslint ."
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "theme"
+  ],
+  "author": "Dev-Vault",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^24.4.0",
+    "esbuild": "^0.25.5",
+    "eslint": "^9.39.4",
+    "eslint-plugin-obsidianmd": "^0.2.5",
+    "globals": "^16.4.0",
+    "jiti": "^2.6.1",
+    "tslib": "^2.8.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.1"
+  },
+  "dependencies": {
+    "obsidian": "latest"
+  }
+}
