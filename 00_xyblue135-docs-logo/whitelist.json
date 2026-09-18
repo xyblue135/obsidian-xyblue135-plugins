@@ -2,6 +2,7 @@
   "_comment": "重要：白名单目录及其所有子目录只允许包含文件夹和 .md 文件，不允许放 .jpg、.png、.webp、.gif、.pdf、.zip 等附件。白名单路径自动递归包含全部子目录。",
   "_usage": "示例：paths 中写 00_docs，则 00_docs 下全部子目录和 Markdown 都生效；如果只想让部分目录生效，请改成 00_docs/某目录。",
   "paths": [
-    "00_docs"
+    "00_docs",
+    "00_assets"
   ]
 }

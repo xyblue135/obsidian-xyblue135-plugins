@@ -1,6 +1,6 @@
 {
   "id": "00_xyblue135-docs-logo",
-  "name": "xyblue135 · 笔记状态",
+  "name": "xyblue135 · 文件 Logo",
   "version": "1.0.0",
   "minAppVersion": "1.4.0",
   "description": "【xyblue135 开源插件】仅对白名单目录及其子目录显示状态图标，支持文件夹、Markdown 文章、自定义 SVG 图标与公开状态标记。",
