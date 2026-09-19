@@ -692,6 +692,31 @@
   font-weight: 600;
 }
 
+.ai-metadata-settings-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 var(--ai-meta-card-gap);
+  padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 14px;
+  background: var(--background-secondary);
+}
+
+.ai-metadata-settings-nav select {
+  flex: 1 1 auto;
+  max-width: 460px;
+}
+
+.ai-metadata-settings-nav button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.ai-metadata-settings-group.is-hidden {
+  display: none;
+}
+
 @media (max-width: 760px) {
   .ai-metadata-settings-hero {
     flex-direction: column;

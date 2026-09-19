@@ -27,3 +27,34 @@
   overflow: hidden;
   pointer-events: none;
 }
+
+/* ==== 元数据（Properties / Frontmatter）高亮 ==== */
+/* 用边框 + 背景把笔记顶部的元数据区和正文区分开 */
+.markdown-preview-view .metadata-container,
+.markdown-source-view .metadata-container,
+.frontmatter-container {
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+}
+
+/* 属性名与属性值用不同颜色区分，便于快速扫读 */
+.metadata-property-key {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.metadata-property-value {
+  color: var(--text-normal);
+}
+
+/* 多条元数据之间加细分隔线，最后一条不加 */
+.metadata-container .metadata-property {
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.metadata-container .metadata-property:last-child {
+  border-bottom: none;
+}

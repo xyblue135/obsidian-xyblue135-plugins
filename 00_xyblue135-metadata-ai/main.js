@@ -3283,6 +3283,16 @@ class AiMetadataSettingTab extends PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
+    this.activeGroup = "global";
+    this.groupOrder = ["global", "summary_short", "summary_long", "tags", "technical_depth", "qa"];
+    this.groupLabels = {
+      global: "全局设置（API / 扫描 / Tag 规则）",
+      summary_short: "短摘要 Summary Short",
+      summary_long: "长摘要 Summary Long",
+      tags: "标签 Tags",
+      technical_depth: "技术深度 Technical Depth",
+      qa: "面试问答 QA",
+    };
   }
 
   display() {
@@ -3369,8 +3379,8 @@ class AiMetadataSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName("Beta：批量合并 4 项 AI 元数据请求")
-      .setDesc("默认开启，属于 Beta 功能。只作用于“同时生成 4 项 AI 元数据”、文件夹识别/同步和自动更新：同一篇笔记用一次 /chat/completions 同时得到 summary_short、summary_long、tags 与 technical_depth；若只缺其中两项或三项，也会尽量一次请求补齐。Properties 中四个字段旁的 ✨ 按钮永远只生成当前字段。关闭后批量流程恢复为 4 个字段串行请求。")
+      .setName("Beta：批量合并 4 项结构化元数据请求")
+      .setDesc("默认开启，属于 Beta 功能。只作用于 summary_short、summary_long、tags 与 technical_depth 这 4 项结构化元数据：同一篇笔记用一次 /chat/completions 同时得到这 4 项；若只缺其中两项或三项，也会尽量一次请求补齐。面试问答 qa 不参与合并，始终单独一次请求生成。Properties 中四个字段旁的 ✨ 按钮永远只生成当前字段。关闭后批量流程恢复为 4 个字段串行请求。")
       .addToggle((toggle) => toggle.setValue(this.plugin.settings.experimentalCombinedRequestEnabled === true).onChange(async (value) => {
         this.plugin.settings.experimentalCombinedRequestEnabled = value;
         await this.plugin.saveAllData();
@@ -3702,6 +3712,44 @@ class AiMetadataSettingTab extends PluginSettingTab {
         this.display();
       }));
 
+    new Setting(containerEl)
+      .setName("面试问答约束（QA Harness）")
+      .setDesc("控制 qa 面试问答的命题方向与作答风格，输出 Q/A 交替纯文本。支持 {{maxQuestions}}。")
+      .addToggle((toggle) => toggle.setValue(this.plugin.settings.qaHarnessEnabled !== false).onChange(async (value) => {
+        this.plugin.settings.qaHarnessEnabled = value;
+        await this.plugin.saveAllData();
+      }));
+
+    new Setting(containerEl)
+      .setName("面试题目数量")
+      .setDesc("每次生成多少道面试题，默认 5，范围 1～20。")
+      .addText((text) => {
+        text.inputEl.type = "number";
+        text.setValue(String(this.plugin.settings.qaMaxQuestions)).onChange(async (value) => {
+          const next = Number.parseInt(value, 10);
+          if (Number.isFinite(next) && next >= 1 && next <= 20) {
+            this.plugin.settings.qaMaxQuestions = next;
+            await this.plugin.saveAllData();
+          }
+        });
+      });
+
+    new Setting(containerEl)
+      .setName("面试问答约束内容")
+      .addTextArea((area) => {
+        area.inputEl.rows = 10;
+        area.inputEl.addClass("ai-metadata-harness-textarea");
+        area.setValue(this.plugin.settings.qaHarness || DEFAULT_QA_HARNESS).onChange(async (value) => {
+          this.plugin.settings.qaHarness = value;
+          await this.plugin.saveAllData();
+        });
+      })
+      .addButton((button) => button.setButtonText("恢复默认").onClick(async () => {
+        this.plugin.settings.qaHarness = DEFAULT_QA_HARNESS;
+        await this.plugin.saveAllData();
+        this.display();
+      }));
+
     containerEl.createEl("h3", { text: "摘要参数" });
     new Setting(containerEl)
       .setName("短摘要最大字符数（summary_short）")
@@ -3735,31 +3783,136 @@ class AiMetadataSettingTab extends PluginSettingTab {
   }
 
   decorateSettingsPanel(containerEl) {
+    if (typeof this.activeGroup !== "string") this.activeGroup = "global";
+
+    const buckets = {};
+    for (const key of this.groupOrder) buckets[key] = [];
+
     const headings = Array.from(containerEl.querySelectorAll(":scope > h3"));
     for (const heading of headings) {
       if (heading.parentElement !== containerEl) continue;
-      const nodes = [];
-      let cursor = heading;
+      const sectionNodes = [];
+      let cursor = heading.nextSibling;
       while (cursor) {
-        if (cursor !== heading && cursor instanceof HTMLElement && cursor.tagName === "H3") break;
+        if (cursor instanceof HTMLElement && cursor.tagName === "H3") break;
         const next = cursor.nextSibling;
-        nodes.push(cursor);
+        if (cursor instanceof HTMLElement) sectionNodes.push(cursor);
         cursor = next;
       }
-      const card = document.createElement("section");
-      card.className = "ai-metadata-settings-card";
-      containerEl.insertBefore(card, heading);
-      for (const node of nodes) card.appendChild(node);
+      for (const node of sectionNodes) {
+        buckets[this._groupKeyForNode(node)].push(node);
+      }
     }
 
-    const advancedTitle = Array.from(containerEl.querySelectorAll(".ai-metadata-settings-card > h3"))
-      .find((el) => el.textContent === "高级输出约束");
-    if (advancedTitle && advancedTitle.parentElement) {
-      advancedTitle.parentElement.classList.add("is-advanced");
+    const nav = this._buildGroupNav(containerEl);
+    const hero = containerEl.querySelector(".ai-metadata-settings-hero");
+    if (hero) {
+      hero.after(nav);
+    } else {
+      containerEl.prepend(nav);
     }
 
-    containerEl.querySelectorAll(".ai-metadata-settings-card .setting-item").forEach((item) => {
-      item.classList.add("ai-metadata-settings-row");
+    for (const key of this.groupOrder) {
+      const groupEl = containerEl.createDiv({ cls: "ai-metadata-settings-card ai-metadata-settings-group" });
+      groupEl.setAttribute("data-group", key);
+      groupEl.createEl("h3", { text: this.groupLabels[key] });
+      for (const node of buckets[key]) groupEl.appendChild(node);
+      containerEl.appendChild(groupEl);
+    }
+
+    for (const heading of headings) heading.remove();
+    this._syncGroupNav(containerEl);
+  }
+
+  _groupKeyForNode(node) {
+    if (node.matches("details")) {
+      const summary = node.querySelector("summary");
+      const text = (summary && summary.textContent || "").trim();
+      if (text.startsWith("更新来源识别规则")) return "global";
+      if (text.startsWith("查看本地 Tag 索引")) return "tags";
+      return "global";
+    }
+    const nameEl = node.querySelector(".setting-item-name");
+    const name = (nameEl && nameEl.textContent || "").trim();
+    const map = {
+      "API 基础地址（Base URL）": "global",
+      "API 密钥（API Key）": "global",
+      "模型（Model）": "global",
+      "API 请求超时（秒）": "global",
+      "API 请求间隔（秒）": "global",
+      "Beta：批量合并 4 项结构化元数据请求": "global",
+      "结构化 JSON 模式": "global",
+      "JSON 修复分支": "global",
+      "结构化输出自动重试": "global",
+      "测试 API": "global",
+      "内容指纹 fingerprint 识别": "global",
+      "摘要输入 Markdown 清理": "global",
+      "白名单目录": "global",
+      "显示 AI 状态": "global",
+      "元数据 status 校验": "global",
+      "自动触发更新": "global",
+      "自动更新频率（分钟）": "global",
+      "待更新笔记 / 文件夹识别": "global",
+      "标签数量（Tags）": "tags",
+      "本地 Tag 索引": "tags",
+      "标签大小写规范化（Tag）": "tags",
+      "技术词规范表": "tags",
+      "整理已有 Tag 大小写冲突": "tags",
+      "标签值安全约束（固定）": "tags",
+      "标签语义约束（Tags Harness）": "tags",
+      "标签语义约束内容": "tags",
+      "短摘要语义约束（Summary Short Harness）": "summary_short",
+      "短摘要语义约束内容": "summary_short",
+      "短摘要最大字符数（summary_short）": "summary_short",
+      "长摘要语义约束（Summary Long Harness）": "summary_long",
+      "长摘要语义约束内容": "summary_long",
+      "长摘要最大字符数（summary_long）": "summary_long",
+      "技术深度评分约束（Technical Depth Prompt）": "technical_depth",
+      "技术深度评分 Prompt": "technical_depth",
+      "面试问答约束（QA Harness）": "qa",
+      "面试题目数量": "qa",
+      "面试问答约束内容": "qa",
+    };
+    return map[name] || "global";
+  }
+
+  _buildGroupNav(containerEl) {
+    const nav = containerEl.createDiv({ cls: "ai-metadata-settings-nav" });
+    const select = nav.createEl("select", { cls: "dropdown" });
+    for (const group of this.groupOrder) {
+      const option = select.createEl("option", { text: this.groupLabels[group] });
+      option.value = group;
+    }
+    select.value = this.activeGroup;
+    select.addEventListener("change", () => {
+      this.activeGroup = select.value;
+      this._syncGroupNav(containerEl);
+    });
+    const prevBtn = nav.createEl("button", { text: "上一项" });
+    prevBtn.setAttribute("type", "button");
+    prevBtn.addEventListener("click", () => this._stepGroup(-1, containerEl));
+    const nextBtn = nav.createEl("button", { text: "下一项" });
+    nextBtn.setAttribute("type", "button");
+    nextBtn.addEventListener("click", () => this._stepGroup(1, containerEl));
+    return nav;
+  }
+
+  _stepGroup(delta, containerEl) {
+    const order = this.groupOrder;
+    let index = order.indexOf(this.activeGroup);
+    if (index < 0) index = 0;
+    index = (index + delta + order.length) % order.length;
+    this.activeGroup = order[index];
+    this._syncGroupNav(containerEl);
+  }
+
+  _syncGroupNav(containerEl) {
+    const select = containerEl.querySelector(".ai-metadata-settings-nav select");
+    if (select) select.value = this.activeGroup;
+    containerEl.querySelectorAll(".ai-metadata-settings-group").forEach((group) => {
+      const active = group.getAttribute("data-group") === this.activeGroup;
+      group.classList.toggle("is-active", active);
+      group.classList.toggle("is-hidden", !active);
     });
   }
 }
