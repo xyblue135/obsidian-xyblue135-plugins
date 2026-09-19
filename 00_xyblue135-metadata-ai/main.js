@@ -482,6 +482,14 @@ const DEFAULT_TECHNICAL_TAG_CANONICAL_LIST = [
   "SkyWalking",
 ].join("\n");
 
+const DEFAULT_QA_HARNESS = `语言：中文。
+用途：基于本笔记正文生成 {{maxQuestions}} 道面试题，用于面试自测复习。
+形式：输出 Q/A 交替的纯文本，不要 Markdown、代码块、标题或额外解释；每题格式固定为：
+Q: <问题>
+A: <答案>
+
+每道题之间空一行。问题要具体、有区分度，优先覆盖正文的核心对象、关键技术点、原理机制、配置/排查要点和易错点；答案要精炼、口语化、可直接用于面试作答，不要大段复述原文。不要编造正文没有的内容。`;
+
 const DEFAULT_SETTINGS = {
   baseUrl: "http://192.168.3.101:3001/v1",
   apiKey: "",
@@ -511,6 +519,9 @@ const DEFAULT_SETTINGS = {
   summaryLongHarness: DEFAULT_SUMMARY_LONG_HARNESS,
   tagsHarness: DEFAULT_TAGS_HARNESS,
   technicalDepthHarness: DEFAULT_TECHNICAL_DEPTH_HARNESS,
+  qaHarnessEnabled: true,
+  qaMaxQuestions: 5,
+  qaHarness: DEFAULT_QA_HARNESS,
 };
 
 const DEFAULT_STATE = {
@@ -606,6 +617,8 @@ module.exports = class AiMetadataPlugin extends Plugin {
     // v0.7.0：新增 technical_depth。只新增默认评分 Prompt，不改写既有文章。
     if (savedSettings.technicalDepthHarnessEnabled === undefined) this.settings.technicalDepthHarnessEnabled = true;
     if (!savedSettings.technicalDepthHarness) this.settings.technicalDepthHarness = DEFAULT_TECHNICAL_DEPTH_HARNESS;
+    if (savedSettings.qaHarnessEnabled === undefined) this.settings.qaHarnessEnabled = true;
+    if (!savedSettings.qaHarness) this.settings.qaHarness = DEFAULT_QA_HARNESS;
     this.state = Object.assign({}, DEFAULT_STATE);
     this.state.files = this.loadPersistedFileState(savedState.files || {});
     // Tag Catalog 只存在于当前运行内存中，避免普通编辑/Tag 扫描反复改写 data.json。
@@ -687,8 +700,13 @@ module.exports = class AiMetadataPlugin extends Plugin {
       callback: () => void this.generateForActiveFile("technical_depth"),
     });
     this.addCommand({
+      id: "generate-qa",
+      name: "为当前 00_docs 笔记生成面试问答 qa",
+      callback: () => void this.generateForActiveFile("qa"),
+    });
+    this.addCommand({
       id: "generate-summary-and-tags",
-      name: "为当前 00_docs 笔记生成 4 项 AI 元数据",
+      name: "为当前 00_docs 笔记生成 5 项 AI 元数据",
       callback: () => void this.generateForActiveFile("all"),
     });
     this.addCommand({
@@ -1050,7 +1068,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
         button.remove();
       }
     });
-    ["summary_short", "summary_long", "tags", "technical_depth"].forEach((kind) => {
+    ["summary_short", "summary_long", "tags", "technical_depth", "qa"].forEach((kind) => {
       const rows = this.findPropertyRows(kind, scope);
       rows.forEach((row) => {
         if (row.querySelector(`.ai-metadata-property-button[data-ai-kind="${kind}"]`)) return;
@@ -1065,7 +1083,9 @@ module.exports = class AiMetadataPlugin extends Plugin {
                 ? "AI 只生成 summary_long"
                 : kind === "tags"
                   ? "AI 只生成 weighted tags"
-                  : "AI 只评估 technical_depth",
+                  : kind === "technical_depth"
+                    ? "AI 只评估 technical_depth"
+                    : "AI 只生成面试问答 qa",
             "data-ai-kind": kind,
             type: "button",
           },
@@ -1131,6 +1151,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
         if (effectiveKind === "summary_short") new Notice("xyblue135 私人·AI 元数据：summary_short 已更新");
         else if (effectiveKind === "summary_long") new Notice("xyblue135 私人·AI 元数据：summary_long 已更新");
         else if (effectiveKind === "technical_depth") new Notice(`xyblue135 私人·AI 元数据：technical_depth 已更新为 ${result.technicalDepth}`);
+        else if (effectiveKind === "qa") new Notice("xyblue135 私人·AI 元数据：qa 面试问答已更新");
         else new Notice(`xyblue135 私人·AI 元数据：已写入 ${result.tags.length} 个 tags`);
       }
       setStateForButtons("success");
@@ -1181,12 +1202,12 @@ module.exports = class AiMetadataPlugin extends Plugin {
   }
 
   async generateAllForFile(file, reason, progress = null, taskContext = {}) {
-    return this.generateSelectedForFile(file, ["summary_short", "summary_long", "tags", "technical_depth"], reason, progress, taskContext);
+    return this.generateSelectedForFile(file, ["summary_short", "summary_long", "tags", "technical_depth", "qa"], reason, progress, taskContext);
   }
 
   async generateSelectedForFile(file, kinds, reason, progress = null, taskContext = {}) {
     const requested = Array.from(new Set((Array.isArray(kinds) ? kinds : [kinds]).filter((kind) =>
-      ["summary_short", "summary_long", "tags", "technical_depth"].includes(kind))));
+      ["summary_short", "summary_long", "tags", "technical_depth", "qa"].includes(kind))));
     if (!requested.length) throw new Error("没有可生成的元数据字段");
 
     const abortSignal = taskContext.abortSignal || null;
@@ -1201,8 +1222,9 @@ module.exports = class AiMetadataPlugin extends Plugin {
     const context = { filePath: file.path, reason, progress, abortSignal };
     let result = {};
 
-    if (requested.length >= 2 && this.settings.experimentalCombinedRequestEnabled === true) {
-      result = await this.generateMetadataBundle(prepared.body, file.basename, currentTags, requested, context);
+    const bundleKinds = requested.filter((kind) => kind !== "qa");
+    if (bundleKinds.length >= 2 && this.settings.experimentalCombinedRequestEnabled === true) {
+      result = await this.generateMetadataBundle(prepared.body, file.basename, currentTags, bundleKinds, context);
     } else {
       // 关闭合并请求时严格串行；只有全部逻辑结果生成成功后才统一写入，避免半更新。
       if (requested.includes("summary_short")) {
@@ -1221,6 +1243,11 @@ module.exports = class AiMetadataPlugin extends Plugin {
         result.technicalDepthResult = await this.generateTechnicalDepth(prepared.body, file.basename, context);
         result.technicalDepth = result.technicalDepthResult.technical_depth;
       }
+    }
+
+    if (requested.includes("qa")) {
+      result.qa = await this.generateQa(prepared.body, file.basename, context);
+      this.ensureTaskActive(abortSignal);
     }
 
     if (requested.includes("tags") && !result.tags) {
@@ -1246,6 +1273,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
         if (requested.includes("summary_long")) frontmatter.summary_long = result.summaryLong;
         if (requested.includes("tags")) frontmatter.tags = result.tags;
         if (requested.includes("technical_depth")) frontmatter.technical_depth = result.technicalDepth;
+        if (requested.includes("qa")) frontmatter.qa = result.qa;
       });
     });
 
@@ -1284,7 +1312,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter || {};
     const sanitized = {};
     Object.keys(fm)
-      .filter((key) => !["summary", "summary_short", "summary_long", "tags", "technical_depth", "position"].includes(key))
+      .filter((key) => !["summary", "summary_short", "summary_long", "tags", "technical_depth", "qa", "position"].includes(key))
       .sort()
       .forEach((key) => {
         sanitized[key] = this.stableClone(fm[key]);
@@ -1544,6 +1572,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
       // 兼容用户旧 Harness 中尚未改掉的占位符：默认映射到长摘要长度。
       .replaceAll("{{summaryMaxChars}}", String(this.settings.summaryLongMaxChars))
       .replaceAll("{{maxTags}}", String(this.settings.maxTags))
+      .replaceAll("{{maxQuestions}}", String(this.settings.qaMaxQuestions))
       .replaceAll("{{whitelistFolder}}", this.normalizeWhitelistFolder());
   }
 
@@ -1739,6 +1768,34 @@ module.exports = class AiMetadataPlugin extends Plugin {
       }
     }
     throw new StructuredOutputError("Technical Depth 结构化输出失败", rawAttempts.join("\n\n"));
+  }
+
+  async generateQa(body, title, context = {}) {
+    const qaBody = this.cleanMarkdownForSummary(body);
+    const harness = this.settings.qaHarnessEnabled !== false
+      ? `\n\n[QA Harness]\n${this.renderHarness(this.settings.qaHarness)}`
+      : "";
+    const system = `你是 Obsidian 知识库的面试出题助手。${harness}`;
+    const prompt = [
+      `笔记标题：${title}`,
+      `请根据以下正文生成 ${this.settings.qaMaxQuestions} 道面试题。`,
+      "只输出 Q/A 交替的纯文本，格式：Q: 题目 / A: 答案，每道题之间空一行；不要 Markdown、代码块或额外解释。",
+      "",
+      qaBody,
+    ].join("\n");
+
+    const raw = await this.chat(system, prompt, { ...context, phase: "QA" });
+    const qa = this.normalizeQaText(raw);
+    if (!qa) throw new Error("AI 返回了空 qa");
+    return qa;
+  }
+
+  normalizeQaText(text) {
+    return String(text ?? "")
+      .replace(/\r\n/g, "\n")
+      .replace(/^```[\s\S]*?\n?|```$/g, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   }
 
   parseTechnicalDepthEnvelope(text, label = "Technical Depth") {
@@ -2370,6 +2427,10 @@ module.exports = class AiMetadataPlugin extends Plugin {
     return Number.isInteger(numeric) && numeric >= 0 && numeric <= 100;
   }
 
+  hasNonEmptyQa(file) {
+    return this.hasNonEmptyFrontmatterField(file, "qa");
+  }
+
   getMetadataCompletion(file, fingerprint) {
     const record = this.state.files[file.path] || {};
     if (this.settings.contentFingerprintEnabled === true) {
@@ -2378,6 +2439,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
         summaryLongDone: Boolean(fingerprint) && record.lastSummaryLongHash === fingerprint,
         tagsDone: Boolean(fingerprint) && record.lastTagsHash === fingerprint,
         technicalDepthDone: Boolean(fingerprint) && record.lastTechnicalDepthHash === fingerprint,
+        qaDone: Boolean(fingerprint) && record.lastQaHash === fingerprint,
       };
     }
     return {
@@ -2385,6 +2447,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
       summaryLongDone: this.hasNonEmptySummaryLong(file),
       tagsDone: this.hasNonEmptyTags(file),
       technicalDepthDone: this.hasValidTechnicalDepth(file),
+      qaDone: this.hasNonEmptyQa(file),
     };
   }
 
@@ -2398,6 +2461,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
       delete record.lastSummaryLongHash;
       delete record.lastTagsHash;
       delete record.lastTechnicalDepthHash;
+      delete record.lastQaHash;
     }
   }
 
@@ -2416,6 +2480,8 @@ module.exports = class AiMetadataPlugin extends Plugin {
         else delete record.lastTagsHash;
         if (this.hasValidTechnicalDepth(file)) record.lastTechnicalDepthHash = fingerprint;
         else delete record.lastTechnicalDepthHash;
+        if (this.hasNonEmptyQa(file)) record.lastQaHash = fingerprint;
+        else delete record.lastQaHash;
         this.state.files[file.path] = record;
       } catch (error) {
         console.warn("xyblue135 私人·AI 元数据：初始化内容指纹基线失败", file.path, error);
@@ -2428,7 +2494,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
     const kinds = Array.isArray(kindOrKinds)
       ? kindOrKinds
       : kindOrKinds === "all"
-        ? ["summary_short", "summary_long", "tags", "technical_depth"]
+        ? ["summary_short", "summary_long", "tags", "technical_depth", "qa"]
         : [kindOrKinds];
 
     if (this.settings.contentFingerprintEnabled === true) {
@@ -2436,12 +2502,14 @@ module.exports = class AiMetadataPlugin extends Plugin {
       if (kinds.includes("summary_long")) record.lastSummaryLongHash = fingerprint;
       if (kinds.includes("tags")) record.lastTagsHash = fingerprint;
       if (kinds.includes("technical_depth")) record.lastTechnicalDepthHash = fingerprint;
+      if (kinds.includes("qa")) record.lastQaHash = fingerprint;
     } else {
       delete record.lastSummaryHash;
       delete record.lastSummaryShortHash;
       delete record.lastSummaryLongHash;
       delete record.lastTagsHash;
       delete record.lastTechnicalDepthHash;
+      delete record.lastQaHash;
     }
     // 成功后只清理真正会被 UI 使用的错误状态；不再保存审计时间、来源、reason、tag scores 或 updateLog。
     record.lastError = "";
@@ -2562,7 +2630,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
       const record = this.state.files[file.path] || {};
       const body = this.stripFrontmatter(raw).trim();
       const emptyBody = !body;
-      const { summaryShortDone, summaryLongDone, tagsDone, technicalDepthDone } = this.getMetadataCompletion(file, fingerprint);
+      const { summaryShortDone, summaryLongDone, tagsDone, technicalDepthDone, qaDone } = this.getMetadataCompletion(file, fingerprint);
       return {
         file,
         folder: this.getFolderPathForFile(file),
@@ -2571,8 +2639,9 @@ module.exports = class AiMetadataPlugin extends Plugin {
         summaryLongDone,
         tagsDone,
         technicalDepthDone,
+        qaDone,
         emptyBody,
-        pending: !emptyBody && (!summaryShortDone || !summaryLongDone || !tagsDone || !technicalDepthDone),
+        pending: !emptyBody && (!summaryShortDone || !summaryLongDone || !tagsDone || !technicalDepthDone || !qaDone),
         preview: includePreview ? (emptyBody ? "（无可分析正文）" : this.makeNotePreview(raw)) : "",
         lastError: emptyBody ? "" : (record.lastError || ""),
         lastErrorType: record.lastErrorType || "",
@@ -2588,6 +2657,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
         summaryLongDone: false,
         tagsDone: false,
         technicalDepthDone: false,
+        qaDone: false,
         pending: true,
         preview: "读取预览失败",
         lastError: message,
@@ -2863,10 +2933,11 @@ module.exports = class AiMetadataPlugin extends Plugin {
           if (!queued.summaryLongDone) missingKinds.push("summary_long");
           if (!queued.tagsDone) missingKinds.push("tags");
           if (!queued.technicalDepthDone) missingKinds.push("technical_depth");
+        if (!queued.qaDone) missingKinds.push("qa");
           if (missingKinds.length) {
             await this.generateSelectedForFile(file, missingKinds, "manual-folder", progress, taskContext);
           } else {
-            skippedFiles.push({ path: file.path, message: "summary_short / summary_long / tags / technical_depth 已有内容", kind: "already-complete" });
+            skippedFiles.push({ path: file.path, message: "summary_short / summary_long / tags / technical_depth / qa 已有内容", kind: "already-complete" });
             continue;
           }
           processedFiles.push(file.path);
@@ -3007,8 +3078,8 @@ module.exports = class AiMetadataPlugin extends Plugin {
         }
         try {
           const prepared = await this.prepareFile(file);
-          const { summaryShortDone, summaryLongDone, tagsDone, technicalDepthDone } = this.getMetadataCompletion(file, prepared.fingerprint);
-          if (summaryShortDone && summaryLongDone && tagsDone && technicalDepthDone) {
+          const { summaryShortDone, summaryLongDone, tagsDone, technicalDepthDone, qaDone } = this.getMetadataCompletion(file, prepared.fingerprint);
+          if (summaryShortDone && summaryLongDone && tagsDone && technicalDepthDone && qaDone) {
             skipped += 1;
             continue;
           }
@@ -3024,6 +3095,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
             if (!summaryLongDone) missingKinds.push("summary_long");
             if (!tagsDone) missingKinds.push("tags");
             if (!technicalDepthDone) missingKinds.push("technical_depth");
+            if (!qaDone) missingKinds.push("qa");
             if (missingKinds.length) {
               await this.generateSelectedForFile(file, missingKinds, "auto", progress, taskContext);
             } else {
