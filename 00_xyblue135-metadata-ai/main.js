@@ -530,6 +530,8 @@ const DEFAULT_SETTINGS = {
   aiTitleHarnessEnabled: true,
   aiTitleMaxItems: 5,
   aiTitleHarness: DEFAULT_AI_TITLE_HARNESS,
+  exportFolderName: "00_docs_待AI审查",
+  exportSampleFile: "",
 };
 
 const DEFAULT_STATE = {
@@ -2861,11 +2863,17 @@ module.exports = class AiMetadataPlugin extends Plugin {
 
   async exportWhitelistFolder() {
     const root = this.normalizeWhitelistFolder();
-    const exportRoot = "AI元数据导出副本";
-    const files = this.getNotesFiles();
+    const exportRoot = String(this.settings.exportFolderName || "00_docs_待AI审查").trim() || "00_docs_待AI审查";
+    const samplePath = String(this.settings.exportSampleFile || "").trim();
+    const files = this.getNotesFiles().filter((file) => this.getMetadataStatus(file) === "done");
+
+    if (exportRoot === root) {
+      new Notice("xyblue135 私人·AI 元数据：导出目录不能与白名单目录相同");
+      return;
+    }
 
     if (!files.length) {
-      new Notice("xyblue135 私人·AI 元数据：" + root + " 目录下没有 Markdown 文件");
+      new Notice("xyblue135 私人·AI 元数据：" + root + " 目录下没有 status: done 的 Markdown 文件");
       return;
     }
 
@@ -2890,6 +2898,16 @@ module.exports = class AiMetadataPlugin extends Plugin {
       copied += 1;
     }
 
+    let sampleCopied = false;
+    if (samplePath) {
+      const sampleFile = this.app.vault.getAbstractFileByPath(samplePath);
+      if (sampleFile instanceof TFile && sampleFile.extension === "md") {
+        const sampleContent = await this.app.vault.read(sampleFile);
+        await this.app.vault.create(exportRoot + "/_样本示例.md", sampleContent);
+        sampleCopied = true;
+      }
+    }
+
     const depthHarness = this.renderHarness(this.settings.technicalDepthHarness || DEFAULT_TECHNICAL_DEPTH_HARNESS);
     const depthOutputIndex = depthHarness.indexOf("## 输出格式");
     const depthRubric = (depthOutputIndex >= 0 ? depthHarness.slice(0, depthOutputIndex) : depthHarness.replace("{{ARTICLE}}", "")).trim();
@@ -2902,6 +2920,10 @@ module.exports = class AiMetadataPlugin extends Plugin {
       "> 网页版 AI 最终会输出完整文档（含 frontmatter），因此无需严格 JSON 校验，输出宽松即可。",
       "",
       "---",
+      "",
+      sampleCopied
+        ? "> 本目录下的「_样本示例.md」是一篇已经完成元数据的范例，请严格参照它的字段结构、命名和写作风格，为其余笔记补全元数据。"
+        : "> 如需参考格式，请以每篇笔记已有的 frontmatter 与各字段说明为准。",
       "",
       "你是精通技术写作与知识管理的中文 AI 助手。本文件夹里有多个 Markdown 笔记，请逐篇阅读正文，为每篇笔记补全一组元数据，并以 YAML frontmatter 直接写在该笔记文件顶部（不要改动正文、不要输出分析过程、不要用严格 JSON 包装）。",
       "",
@@ -3823,6 +3845,34 @@ class AiMetadataSettingTab extends PluginSettingTab {
         this.plugin.openPendingNotesDashboard();
       }));
 
+    new Setting(containerEl)
+      .setName("导出目录名")
+      .setDesc("导出 00_docs 中 status: done 文章副本时所用的目标目录名。默认 00_docs_待AI审查。")
+      .addText((text) => text.setValue(this.plugin.settings.exportFolderName || "00_docs_待AI审查").onChange(async (value) => {
+        this.plugin.settings.exportFolderName = value.trim() || "00_docs_待AI审查";
+        await this.plugin.saveAllData();
+      }));
+
+    new Setting(containerEl)
+      .setName("导出样本文件")
+      .setDesc("可选：手工选择一个已完成元数据的 Markdown 作为样本，导出时随目录附带为 _样本示例.md；留空则不附带。")
+      .addText((text) => text.setValue(this.plugin.settings.exportSampleFile || "").setPlaceholder("留空 = 不附带样本").onChange(async (value) => {
+        this.plugin.settings.exportSampleFile = value.trim();
+        await this.plugin.saveAllData();
+      }))
+      .addButton((button) => button.setButtonText("选择文件").onClick(() => {
+        new ExportSamplePickerModal(this.app, this.plugin, (path) => {
+          this.plugin.settings.exportSampleFile = path;
+          void this.plugin.saveAllData();
+          this.display();
+        }).open();
+      }))
+      .addButton((button) => button.setButtonText("清空").onClick(async () => {
+        this.plugin.settings.exportSampleFile = "";
+        await this.plugin.saveAllData();
+        this.display();
+      }));
+
     const provenance = containerEl.createEl("details", { cls: "ai-metadata-settings-details" });
     provenance.createEl("summary", { text: "更新来源识别规则" });
     provenance.createEl("div", {
@@ -4114,6 +4164,8 @@ class AiMetadataSettingTab extends PluginSettingTab {
       "自动触发更新": "global",
       "自动更新频率（分钟）": "global",
       "待更新笔记 / 文件夹识别": "global",
+      "导出目录名": "global",
+      "导出样本文件": "global",
       "标签数量（Tags）": "tags",
       "本地 Tag 索引": "tags",
       "标签大小写规范化（Tag）": "tags",
@@ -4600,3 +4652,41 @@ class PendingNotesDashboardModal extends Modal {
   }
 }
 
+
+class ExportSamplePickerModal extends Modal {
+  constructor(app, plugin, onPick) {
+    super(app);
+    this.plugin = plugin;
+    this.onPick = onPick;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl("h2", { text: "选择导出样本文件" });
+    contentEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "选择一个已完成元数据的 Markdown 作为样本；它将随导出目录附带为 _样本示例.md。",
+    });
+
+    const files = this.plugin.getNotesFiles().filter((file) => this.plugin.getMetadataStatus(file) === "done");
+    if (!files.length) {
+      contentEl.createEl("p", { text: "白名单目录中没有 status: done 的 Markdown。" });
+      return;
+    }
+
+    const list = contentEl.createDiv({ cls: "ai-metadata-sample-list" });
+    for (const file of files) {
+      const row = list.createDiv({ cls: "ai-metadata-sample-row" });
+      row.setText(file.path);
+      row.addEventListener("click", () => {
+        this.onPick(file.path);
+        this.close();
+      });
+    }
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
