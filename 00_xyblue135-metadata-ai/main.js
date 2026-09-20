@@ -736,6 +736,11 @@ module.exports = class AiMetadataPlugin extends Plugin {
       name: "打开待更新元数据笔记面板",
       callback: () => this.openPendingNotesDashboard(),
     });
+    this.addCommand({
+      id: "export-whitelist-folder",
+      name: "导出 00_docs 白名单目录（含提示词）",
+      callback: () => void this.exportWhitelistFolder(),
+    });
 
     this.app.workspace.onLayoutReady(() => {
       this.startObserver();
@@ -786,6 +791,16 @@ module.exports = class AiMetadataPlugin extends Plugin {
         }
       }));
     }
+
+    this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
+      if (!(file instanceof TFile) || file.extension !== "md" || !this.isWhitelisted(file)) return;
+      menu.addItem((item) => {
+        item
+          .setTitle("自动生成 AI 信息")
+          .setIcon("sparkles")
+          .onClick(() => void this.generateAiInfoForFile(file));
+      });
+    }));
   }
 
   onunload() {
@@ -2844,6 +2859,110 @@ module.exports = class AiMetadataPlugin extends Plugin {
     new PendingNotesDashboardModal(this.app, this).open();
   }
 
+  async exportWhitelistFolder() {
+    const root = this.normalizeWhitelistFolder();
+    const exportRoot = "AI元数据导出副本";
+    const files = this.getNotesFiles();
+
+    if (!files.length) {
+      new Notice("xyblue135 私人·AI 元数据：" + root + " 目录下没有 Markdown 文件");
+      return;
+    }
+
+    const previous = this.app.vault.getAbstractFileByPath(exportRoot);
+    if (previous) await this.app.vault.delete(previous);
+
+    const ensureFolder = async (folder) => {
+      if (!folder) return;
+      if (this.app.vault.getAbstractFileByPath(folder)) return;
+      const slash = folder.lastIndexOf("/");
+      if (slash > 0) await ensureFolder(folder.slice(0, slash));
+      try { await this.app.vault.createFolder(folder); } catch (_) {}
+    };
+
+    let copied = 0;
+    for (const file of files) {
+      const rel = file.path.startsWith(root + "/") ? file.path.slice(root.length + 1) : file.path;
+      const target = exportRoot + "/" + rel;
+      await ensureFolder(target.slice(0, target.lastIndexOf("/")));
+      const content = await this.app.vault.read(file);
+      await this.app.vault.create(target, content);
+      copied += 1;
+    }
+
+    const depthHarness = this.renderHarness(this.settings.technicalDepthHarness || DEFAULT_TECHNICAL_DEPTH_HARNESS);
+    const depthOutputIndex = depthHarness.indexOf("## 输出格式");
+    const depthRubric = (depthOutputIndex >= 0 ? depthHarness.slice(0, depthOutputIndex) : depthHarness.replace("{{ARTICLE}}", "")).trim();
+
+    const prompt = [
+      "# AI 元数据补全提示词",
+      "",
+      "> 本文件夹是「" + root + "」白名单目录的副本，含多篇 Markdown 笔记。",
+      "> 把这段提示词连同整个文件夹里的笔记一起交给支持附件的网页版 AI，让它逐篇补全元数据。",
+      "> 网页版 AI 最终会输出完整文档（含 frontmatter），因此无需严格 JSON 校验，输出宽松即可。",
+      "",
+      "---",
+      "",
+      "你是精通技术写作与知识管理的中文 AI 助手。本文件夹里有多个 Markdown 笔记，请逐篇阅读正文，为每篇笔记补全一组元数据，并以 YAML frontmatter 直接写在该笔记文件顶部（不要改动正文、不要输出分析过程、不要用严格 JSON 包装）。",
+      "",
+      "共 6 个字段，顺序固定：AI_title → AI_tags → AI_summary_short → AI_summary_long → AI_technical_depth → AI_qa。",
+      "",
+      "========== 字段 1：AI_title（参考标题） ==========",
+      this.renderHarness(this.settings.aiTitleHarness || DEFAULT_AI_TITLE_HARNESS),
+      "",
+      "========== 字段 2：AI_tags（标签） ==========",
+      this.renderHarness(this.settings.tagsHarness || DEFAULT_TAGS_HARNESS),
+      "",
+      TAG_VALUE_SAFETY_PROTOCOL,
+      "",
+      "========== 字段 3：AI_summary_short（短摘要） ==========",
+      this.renderHarness(this.settings.summaryShortHarness || DEFAULT_SUMMARY_SHORT_HARNESS),
+      "",
+      "========== 字段 4：AI_summary_long（长摘要） ==========",
+      this.renderHarness(this.settings.summaryLongHarness || DEFAULT_SUMMARY_LONG_HARNESS),
+      "",
+      "========== 字段 5：AI_technical_depth（技术深度） ==========",
+      depthRubric,
+      "",
+      "该字段最终只输出一个 0～100 的整数。",
+      "",
+      "========== 字段 6：AI_qa（面试问答） ==========",
+      this.renderHarness(this.settings.qaHarness || DEFAULT_QA_HARNESS),
+      "",
+      "========== 输出格式（宽松） ==========",
+      "",
+      "每篇笔记以 YAML frontmatter 写在顶部，示例：",
+      "",
+      "---",
+      "AI_title:",
+      "  - 标题一",
+      "  - 标题二",
+      "  - 标题三",
+      "  - 标题四",
+      "  - 标题五",
+      "AI_tags:",
+      "  - tag-a",
+      "  - tag-b",
+      "AI_summary_short: 一句话短摘要",
+      "AI_summary_long: 详细摘要，可多句。",
+      "AI_technical_depth: 60",
+      "AI_qa: |",
+      "  Q: 问题一",
+      "  A: 回答一",
+      "  Q: 问题二",
+      "  A: 回答二",
+      "---",
+      "",
+      "说明：最终以完整文档（附件 / 文本）形式整体输出即可，字段内容宽松、可读即可，无需严格 JSON、无需通过程序校验。",
+    ].join("\n");
+
+    await this.app.vault.create(exportRoot + "/_AI补全提示词.md", prompt);
+
+    new Notice("xyblue135 私人·AI 元数据：已导出 " + copied + " 篇 → " + exportRoot + "/");
+    const promptFile = this.app.vault.getAbstractFileByPath(exportRoot + "/_AI补全提示词.md");
+    if (promptFile instanceof TFile) await this.app.workspace.getLeaf(false).openFile(promptFile);
+  }
+
   async retrySingleMetadataFile(file, showNotice = true) {
     if (!(file instanceof TFile) || file.extension !== "md" || !this.isWhitelisted(file)) {
       if (showNotice) new Notice("xyblue135 私人·AI 元数据：只能重试白名单目录中的 Markdown");
@@ -2899,6 +3018,18 @@ module.exports = class AiMetadataPlugin extends Plugin {
         if (this.settings.autoUpdateEnabled) this.scheduleNextAutoRun();
         else this.refreshStatusBar();
       }
+    }
+  }
+
+  async generateAiInfoForFile(file) {
+    const result = await this.retrySingleMetadataFile(file, false);
+    if (result.success) {
+      new Notice(`xyblue135 私人·AI 元数据：已生成 ${file.basename} 的 AI 信息`);
+      this.scheduleInjection();
+    } else if (result.skipped) {
+      new Notice(`xyblue135 私人·AI 元数据：跳过 ${file.basename}：无可分析正文`);
+    } else {
+      new Notice(`xyblue135 私人·AI 元数据：未能生成 AI 信息：${result.message}`, 7000);
     }
   }
 
@@ -4178,6 +4309,8 @@ class PendingNotesDashboardModal extends Modal {
     });
     const refreshButton = toolbar.createEl("button", { text: "重新统计", cls: "mod-cta" });
     refreshButton.addEventListener("click", () => void this.render());
+    const exportButton = toolbar.createEl("button", { text: "导出白名单目录" });
+    exportButton.addEventListener("click", () => void this.plugin.exportWhitelistFolder());
 
     if (this.plugin.manualFolderRun && !this.plugin.manualFolderRun.controller.signal.aborted) {
       const stopCurrentButton = toolbar.createEl("button", {
