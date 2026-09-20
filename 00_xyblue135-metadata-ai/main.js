@@ -495,13 +495,21 @@ const DEFAULT_AI_TITLE_HARNESS = `语言：中文。
 形式：只输出纯文本标题列表，每行一个标题，不要序号、Markdown 列表符号、代码块、标题或额外解释。
 要求：标题要准确反映正文主题与关键信息，风格多样（可包含直述式、设问式、数字式等），彼此区分明显；不要编造正文没有的内容。`;
 
+const DEFAULT_TAKE_HARNESS = `作为该文章所在领域的资深工程师，阅读技术博文，写一段简短客观评价。
+评价要点：
+- 肯定文章的优点：行文规整、有无错误、对目标读者的价值；
+- 指出局限性：文章只停留在概念 / 使用层面，没有深入底层协议、内部机制；
+- 语气平实，不带嘲讽，不吹不黑，内行视角，不要长篇大论。`;
+
 const DEFAULT_SETTINGS = {
   baseUrl: "http://192.168.3.101:3001/v1",
   apiKey: "",
   model: "auto",
   whitelistFolder: "00_docs",
   summaryShortMaxChars: 100,
+  summaryShortMaxCharsEnabled: true,
   summaryLongMaxChars: 300,
+  summaryLongMaxCharsEnabled: true,
   summaryMarkdownCleanupEnabled: false,
   contentFingerprintEnabled: false,
   maxTags: 7,
@@ -510,7 +518,8 @@ const DEFAULT_SETTINGS = {
   statusDoneOnlyEnabled: false,
   requestTimeoutSeconds: 180,
   requestIntervalSeconds: 30,
-  experimentalCombinedRequestEnabled: true,
+  experimentalCombinedRequestEnabled: false,
+  feedMetadataToAiEnabled: false,
   structuredJsonModeEnabled: true,
   jsonRepairEnabled: true,
   statusBarEnabled: true,
@@ -524,14 +533,16 @@ const DEFAULT_SETTINGS = {
   summaryLongHarness: DEFAULT_SUMMARY_LONG_HARNESS,
   tagsHarness: DEFAULT_TAGS_HARNESS,
   technicalDepthHarness: DEFAULT_TECHNICAL_DEPTH_HARNESS,
+  takeHarnessEnabled: true,
+  takeHarness: DEFAULT_TAKE_HARNESS,
   qaHarnessEnabled: true,
   qaMaxQuestions: 5,
+  qaMaxQuestionsEnabled: false,
   qaHarness: DEFAULT_QA_HARNESS,
   aiTitleHarnessEnabled: true,
   aiTitleMaxItems: 5,
+  aiTitleMaxItemsEnabled: true,
   aiTitleHarness: DEFAULT_AI_TITLE_HARNESS,
-  exportFolderName: "00_docs_待AI审查",
-  exportSampleFile: "",
 };
 
 const DEFAULT_STATE = {
@@ -602,12 +613,8 @@ module.exports = class AiMetadataPlugin extends Plugin {
         ? Math.min(1000, legacySummaryMaxChars)
         : DEFAULT_SETTINGS.summaryLongMaxChars;
     }
-    if (savedSettings.summaryShortHarnessEnabled === undefined) {
-      this.settings.summaryShortHarnessEnabled = savedSettings.summaryHarnessEnabled !== false;
-    }
-    if (savedSettings.summaryLongHarnessEnabled === undefined) {
-      this.settings.summaryLongHarnessEnabled = savedSettings.summaryHarnessEnabled !== false;
-    }
+    this.settings.summaryShortHarnessEnabled = true;
+    this.settings.summaryLongHarnessEnabled = true;
     if (!savedSettings.summaryShortHarness) this.settings.summaryShortHarness = DEFAULT_SUMMARY_SHORT_HARNESS;
     if (!savedSettings.summaryLongHarness) this.settings.summaryLongHarness = DEFAULT_SUMMARY_LONG_HARNESS;
     delete this.settings.summaryMaxChars;
@@ -621,16 +628,23 @@ module.exports = class AiMetadataPlugin extends Plugin {
       || savedSettings.tagsHarness === LEGACY_TAGS_HARNESS_V050) {
       this.settings.tagsHarness = DEFAULT_TAGS_HARNESS;
     }
+    this.settings.tagsHarnessEnabled = true;
     if (!savedSettings.technicalTagCanonicalList) {
       this.settings.technicalTagCanonicalList = DEFAULT_TECHNICAL_TAG_CANONICAL_LIST;
     }
     // v0.7.0：新增 technical_depth。只新增默认评分 Prompt，不改写既有文章。
-    if (savedSettings.technicalDepthHarnessEnabled === undefined) this.settings.technicalDepthHarnessEnabled = true;
+    this.settings.technicalDepthHarnessEnabled = true;
     if (!savedSettings.technicalDepthHarness) this.settings.technicalDepthHarness = DEFAULT_TECHNICAL_DEPTH_HARNESS;
-    if (savedSettings.qaHarnessEnabled === undefined) this.settings.qaHarnessEnabled = true;
+    this.settings.takeHarnessEnabled = true;
+    if (!savedSettings.takeHarness) this.settings.takeHarness = DEFAULT_TAKE_HARNESS;
+    this.settings.qaHarnessEnabled = true;
     if (!savedSettings.qaHarness) this.settings.qaHarness = DEFAULT_QA_HARNESS;
-    if (savedSettings.aiTitleHarnessEnabled === undefined) this.settings.aiTitleHarnessEnabled = true;
+    this.settings.aiTitleHarnessEnabled = true;
     if (!savedSettings.aiTitleHarness) this.settings.aiTitleHarness = DEFAULT_AI_TITLE_HARNESS;
+    // 结构化合并请求已下线：强制关闭合并、内容指纹与摘要 Markdown 清理；自动更新改为逐字段单个请求。
+    this.settings.experimentalCombinedRequestEnabled = false;
+    this.settings.contentFingerprintEnabled = false;
+    this.settings.summaryMarkdownCleanupEnabled = false;
     this.state = Object.assign({}, DEFAULT_STATE);
     this.state.files = this.loadPersistedFileState(savedState.files || {});
     // Tag Catalog 只存在于当前运行内存中，避免普通编辑/Tag 扫描反复改写 data.json。
@@ -712,6 +726,11 @@ module.exports = class AiMetadataPlugin extends Plugin {
       callback: () => void this.generateForActiveFile("technical_depth"),
     });
     this.addCommand({
+      id: "generate-take",
+      name: "为当前 00_docs 笔记生成客观评价 AI_take",
+      callback: () => void this.generateForActiveFile("take"),
+    });
+    this.addCommand({
       id: "generate-qa",
       name: "为当前 00_docs 笔记生成面试问答 AI_qa",
       callback: () => void this.generateForActiveFile("qa"),
@@ -723,7 +742,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
     });
     this.addCommand({
       id: "generate-summary-and-tags",
-      name: "为当前 00_docs 笔记生成 6 项 AI 元数据",
+      name: "为当前 00_docs 笔记生成 7 项 AI 元数据",
       callback: () => void this.generateForActiveFile("all"),
     });
     this.addCommand({
@@ -1100,7 +1119,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
         button.remove();
       }
     });
-    ["summary_short", "summary_long", "tags", "technical_depth", "qa", "ai_title"].forEach((kind) => {
+    ["summary_short", "summary_long", "tags", "technical_depth", "take", "qa", "ai_title"].forEach((kind) => {
       const rows = this.findPropertyRows(kind, scope);
       rows.forEach((row) => {
         if (row.querySelector(`.ai-metadata-property-button[data-ai-kind="${kind}"]`)) return;
@@ -1117,9 +1136,11 @@ module.exports = class AiMetadataPlugin extends Plugin {
                   ? "AI 只生成 weighted tags"
                   : kind === "technical_depth"
                     ? "AI 只评估 AI_technical_depth"
-                    : kind === "qa"
-                      ? "AI 只生成面试问答 AI_qa"
-                      : "AI 只生成参考标题 AI_title",
+                    : kind === "take"
+                      ? "AI 只生成客观评价 AI_take"
+                      : kind === "qa"
+                        ? "AI 只生成面试问答 AI_qa"
+                        : "AI 只生成参考标题 AI_title",
             "data-ai-kind": kind,
             type: "button",
           },
@@ -1144,6 +1165,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
       summary_long: "AI_summary_long",
       tags: "AI_tags",
       technical_depth: "AI_technical_depth",
+      take: "AI_take",
       qa: "AI_qa",
       ai_title: "AI_title",
     };
@@ -1189,7 +1211,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
     try {
       if (effectiveKind === "all") {
         const result = await this.generateAllForFile(file, "manual");
-        new Notice("xyblue135 私人·AI 元数据：6 项 AI 元数据已更新");
+        new Notice("xyblue135 私人·AI 元数据：7 项 AI 元数据已更新");
       } else if (effectiveKind === "summaries") {
         await this.generateSelectedForFile(file, ["summary_short", "summary_long"], "manual");
         new Notice("xyblue135 私人·AI 元数据：AI_summary_short + AI_summary_long 已更新");
@@ -1198,6 +1220,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
         if (effectiveKind === "summary_short") new Notice("xyblue135 私人·AI 元数据：AI_summary_short 已更新");
         else if (effectiveKind === "summary_long") new Notice("xyblue135 私人·AI 元数据：AI_summary_long 已更新");
         else if (effectiveKind === "technical_depth") new Notice(`xyblue135 私人·AI 元数据：AI_technical_depth 已更新为 ${result.technicalDepth}`);
+        else if (effectiveKind === "take") new Notice("xyblue135 私人·AI 元数据：AI_take 客观评价已更新");
         else if (effectiveKind === "qa") new Notice("xyblue135 私人·AI 元数据：AI_qa 面试问答已更新");
         else if (effectiveKind === "ai_title") new Notice("xyblue135 私人·AI 元数据：AI_title 已生成参考标题");
         else new Notice(`xyblue135 私人·AI 元数据：已写入 ${result.tags.length} 个 AI_tags`);
@@ -1250,12 +1273,12 @@ module.exports = class AiMetadataPlugin extends Plugin {
   }
 
   async generateAllForFile(file, reason, progress = null, taskContext = {}) {
-    return this.generateSelectedForFile(file, ["summary_short", "summary_long", "tags", "technical_depth", "qa", "ai_title"], reason, progress, taskContext);
+    return this.generateSelectedForFile(file, ["summary_short", "summary_long", "tags", "technical_depth", "take", "qa", "ai_title"], reason, progress, taskContext);
   }
 
   async generateSelectedForFile(file, kinds, reason, progress = null, taskContext = {}) {
     const requested = Array.from(new Set((Array.isArray(kinds) ? kinds : [kinds]).filter((kind) =>
-      ["summary_short", "summary_long", "tags", "technical_depth", "qa", "ai_title"].includes(kind))));
+      ["summary_short", "summary_long", "tags", "technical_depth", "take", "qa", "ai_title"].includes(kind))));
     if (!requested.length) throw new Error("没有可生成的元数据字段");
 
     const abortSignal = taskContext.abortSignal || null;
@@ -1266,11 +1289,11 @@ module.exports = class AiMetadataPlugin extends Plugin {
     if (respectStatusFilter) this.assertRecognitionEligible(file);
 
     const prepared = await this.prepareFile(file);
-    const currentTags = this.readCurrentTags(file);
+    const currentTags = this.settings.feedMetadataToAiEnabled === true ? this.readCurrentTags(file) : [];
     const context = { filePath: file.path, reason, progress, abortSignal };
     let result = {};
 
-    const bundleKinds = requested.filter((kind) => kind !== "qa" && kind !== "ai_title");
+    const bundleKinds = requested.filter((kind) => kind !== "take" && kind !== "qa" && kind !== "ai_title");
     if (bundleKinds.length >= 2 && this.settings.experimentalCombinedRequestEnabled === true) {
       result = await this.generateMetadataBundle(prepared.body, file.basename, currentTags, bundleKinds, context);
     } else {
@@ -1291,6 +1314,11 @@ module.exports = class AiMetadataPlugin extends Plugin {
         result.technicalDepthResult = await this.generateTechnicalDepth(prepared.body, file.basename, context);
         result.technicalDepth = result.technicalDepthResult.technical_depth;
       }
+    }
+
+    if (requested.includes("take")) {
+      result.take = await this.generateTake(prepared.body, file.basename, context);
+      this.ensureTaskActive(abortSignal);
     }
 
     if (requested.includes("qa")) {
@@ -1326,6 +1354,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
         if (requested.includes("summary_long")) frontmatter.AI_summary_long = result.summaryLong;
         if (requested.includes("tags")) frontmatter.AI_tags = result.tags;
         if (requested.includes("technical_depth")) frontmatter.AI_technical_depth = result.technicalDepth;
+        if (requested.includes("take")) frontmatter.AI_take = result.take;
         if (requested.includes("qa")) frontmatter.AI_qa = result.qa;
         if (requested.includes("ai_title")) frontmatter.AI_title = result.title;
       });
@@ -1366,7 +1395,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter || {};
     const sanitized = {};
     Object.keys(fm)
-      .filter((key) => !["summary", "summary_short", "summary_long", "tags", "technical_depth", "qa", "AI_summary_short", "AI_summary_long", "AI_tags", "AI_technical_depth", "AI_qa", "AI_title", "position"].includes(key))
+      .filter((key) => !["summary", "summary_short", "summary_long", "tags", "technical_depth", "take", "qa", "AI_summary_short", "AI_summary_long", "AI_tags", "AI_technical_depth", "AI_take", "AI_qa", "AI_title", "position"].includes(key))
       .sort()
       .forEach((key) => {
         sanitized[key] = this.stableClone(fm[key]);
@@ -1713,16 +1742,21 @@ module.exports = class AiMetadataPlugin extends Plugin {
       ? `\n\n[Summary Short Harness]\n${this.renderHarness(this.settings.summaryShortHarness)}`
       : "";
     const system = `你是 Obsidian 知识库的元数据整理助手。${harness}`;
+    const shortCharLimit = this.settings.summaryShortMaxCharsEnabled !== false
+      ? this.settings.summaryShortMaxChars
+      : 10000;
     const prompt = [
       `笔记标题：${title}`,
-      `summary_short 最大字符数：${this.settings.summaryShortMaxChars}`,
+      this.settings.summaryShortMaxCharsEnabled !== false
+        ? `summary_short 最大字符数：${this.settings.summaryShortMaxChars}`
+        : "",
       "请根据以下正文生成 summary_short。只输出摘要正文，不要输出字段名。",
       "",
       summaryBody,
-    ].join("\n");
+    ].filter(Boolean).join("\n");
 
     const raw = await this.chat(system, prompt, { ...context, phase: "Summary Short" });
-    const summary = this.normalizeSummaryText(raw, this.settings.summaryShortMaxChars, 100);
+    const summary = this.normalizeSummaryText(raw, shortCharLimit, 100);
     if (!summary) throw new Error("AI 返回了空 summary_short");
     return summary;
   }
@@ -1733,16 +1767,21 @@ module.exports = class AiMetadataPlugin extends Plugin {
       ? `\n\n[Summary Long Harness]\n${this.renderHarness(this.settings.summaryLongHarness)}`
       : "";
     const system = `你是 Obsidian 知识库的元数据整理助手。${harness}`;
+    const longCharLimit = this.settings.summaryLongMaxCharsEnabled !== false
+      ? this.settings.summaryLongMaxChars
+      : 10000;
     const prompt = [
       `笔记标题：${title}`,
-      `summary_long 最大字符数：${this.settings.summaryLongMaxChars}`,
+      this.settings.summaryLongMaxCharsEnabled !== false
+        ? `summary_long 最大字符数：${this.settings.summaryLongMaxChars}`
+        : "",
       "请根据以下正文生成 summary_long。只输出摘要正文，不要输出字段名。",
       "",
       summaryBody,
-    ].join("\n");
+    ].filter(Boolean).join("\n");
 
     const raw = await this.chat(system, prompt, { ...context, phase: "Summary Long" });
-    const summary = this.normalizeSummaryText(raw, this.settings.summaryLongMaxChars, 300);
+    const summary = this.normalizeSummaryText(raw, longCharLimit, 300);
     if (!summary) throw new Error("AI 返回了空 summary_long");
     return summary;
   }
@@ -1833,11 +1872,13 @@ module.exports = class AiMetadataPlugin extends Plugin {
     const system = `你是 Obsidian 知识库的面试出题助手。${harness}`;
     const prompt = [
       `笔记标题：${title}`,
-      `请根据以下正文生成 ${this.settings.qaMaxQuestions} 道面试题。`,
+      this.settings.qaMaxQuestionsEnabled === true
+        ? `请根据以下正文生成 ${this.settings.qaMaxQuestions} 道面试题。`
+        : "",
       "只输出 Q/A 交替的纯文本，格式：Q: 题目 / A: 答案，每道题之间空一行；不要 Markdown、代码块或额外解释。",
       "",
       qaBody,
-    ].join("\n");
+    ].filter(Boolean).join("\n");
 
     const raw = await this.chat(system, prompt, { ...context, phase: "QA" });
     const qa = this.normalizeQaText(raw);
@@ -1853,6 +1894,23 @@ module.exports = class AiMetadataPlugin extends Plugin {
       .trim();
   }
 
+  async generateTake(body, title, context = {}) {
+    const takeBody = this.cleanMarkdownForSummary(body);
+    const harness = this.settings.takeHarnessEnabled !== false
+      ? "\n\n[Take Harness]\n" + this.renderHarness(this.settings.takeHarness)
+      : "";
+    const system = "你是 Obsidian 知识库的客观评价助手。" + harness;
+    const prompt = [
+      "笔记标题：" + title,
+      takeBody,
+    ].filter(Boolean).join("\n");
+
+    const raw = await this.chat(system, prompt, { ...context, phase: "Take" });
+    const take = this.normalizeQaText(raw);
+    if (!take) throw new Error("AI 返回了空 take");
+    return take;
+  }
+
   async generateTitle(body, title, context = {}) {
     const titleBody = this.cleanMarkdownForSummary(body);
     const harness = this.settings.aiTitleHarnessEnabled !== false
@@ -1861,11 +1919,13 @@ module.exports = class AiMetadataPlugin extends Plugin {
     const system = `你是 Obsidian 知识库的标题生成助手。${harness}`;
     const prompt = [
       `笔记标题：${title}`,
-      `请根据以下正文生成 ${this.settings.aiTitleMaxItems} 个参考性文章标题。`,
+      this.settings.aiTitleMaxItemsEnabled !== false
+        ? `请根据以下正文生成 ${this.settings.aiTitleMaxItems} 个参考性文章标题。`
+        : "请根据以下正文生成参考性文章标题。",
       "只输出纯文本标题列表，每行一个标题，不要序号、Markdown 列表符号、代码块或额外解释。",
       "",
       titleBody,
-    ].join("\n");
+    ].filter(Boolean).join("\n");
 
     const raw = await this.chat(system, prompt, { ...context, phase: "TITLE" });
     const titles = this.normalizeTitle(raw);
@@ -1880,7 +1940,9 @@ module.exports = class AiMetadataPlugin extends Plugin {
       .split("\n")
       .map((line) => line.replace(/^[\s]*[-*•\d.、)）]+[\s]*/, "").trim())
       .filter((line) => line.length > 0)
-      .slice(0, Math.max(1, Number(this.settings.aiTitleMaxItems) || 5));
+      .slice(0, this.settings.aiTitleMaxItemsEnabled !== false
+        ? Math.max(1, Number(this.settings.aiTitleMaxItems) || 5)
+        : 50);
   }
 
   parseTechnicalDepthEnvelope(text, label = "Technical Depth") {
@@ -1955,11 +2017,15 @@ module.exports = class AiMetadataPlugin extends Plugin {
     const taskLines = [];
     const schema = {};
     if (wantShort) {
-      taskLines.push(`- summary_short：生成用于快速识别主题的短摘要，最大 ${this.settings.summaryShortMaxChars} 字符。`);
+      taskLines.push(this.settings.summaryShortMaxCharsEnabled !== false
+        ? `- summary_short：生成用于快速识别主题的短摘要，最大 ${this.settings.summaryShortMaxChars} 字符。`
+        : "- summary_short：生成用于快速识别主题的短摘要。");
       schema.summary_short = "短摘要文本";
     }
     if (wantLong) {
-      taskLines.push(`- summary_long：生成用于理解文章结构的长摘要，最大 ${this.settings.summaryLongMaxChars} 字符。`);
+      taskLines.push(this.settings.summaryLongMaxCharsEnabled !== false
+        ? `- summary_long：生成用于理解文章结构的长摘要，最大 ${this.settings.summaryLongMaxChars} 字符。`
+        : "- summary_long：生成用于理解文章结构的长摘要。");
       schema.summary_long = "长摘要文本";
     }
     if (wantTags) {
@@ -1981,8 +2047,8 @@ module.exports = class AiMetadataPlugin extends Plugin {
 
     const basePrompt = [
       `笔记标题：${title}`,
-      wantShort ? `summary_short 最大字符数：${this.settings.summaryShortMaxChars}` : "",
-      wantLong ? `summary_long 最大字符数：${this.settings.summaryLongMaxChars}` : "",
+      wantShort && this.settings.summaryShortMaxCharsEnabled !== false ? `summary_short 最大字符数：${this.settings.summaryShortMaxChars}` : "",
+      wantLong && this.settings.summaryLongMaxCharsEnabled !== false ? `summary_long 最大字符数：${this.settings.summaryLongMaxChars}` : "",
       wantTags ? `当前 tags（已转为 value）：${currentTags.length ? currentTags.join("、") : "无"}` : "",
       "请同时完成以下字段：",
       ...taskLines,
@@ -2018,11 +2084,11 @@ module.exports = class AiMetadataPlugin extends Plugin {
         const parsed = this.parseMetadataBundle(raw, { wantShort, wantLong, wantTags, wantDepth });
         const result = {};
         if (wantShort) {
-          result.summaryShort = this.normalizeSummaryText(parsed.summaryShort, this.settings.summaryShortMaxChars, 100);
+          result.summaryShort = this.normalizeSummaryText(parsed.summaryShort, this.settings.summaryShortMaxCharsEnabled !== false ? this.settings.summaryShortMaxChars : 10000, 100);
           if (!result.summaryShort) throw new StructuredOutputError("合并请求没有返回可用 summary_short", raw);
         }
         if (wantLong) {
-          result.summaryLong = this.normalizeSummaryText(parsed.summaryLong, this.settings.summaryLongMaxChars, 300);
+          result.summaryLong = this.normalizeSummaryText(parsed.summaryLong, this.settings.summaryLongMaxCharsEnabled !== false ? this.settings.summaryLongMaxChars : 10000, 300);
           if (!result.summaryLong) throw new StructuredOutputError("合并请求没有返回可用 summary_long", raw);
         }
         if (wantTags) {
@@ -2516,6 +2582,10 @@ module.exports = class AiMetadataPlugin extends Plugin {
     return this.hasNonEmptyFrontmatterField(file, "AI_qa");
   }
 
+  hasNonEmptyTake(file) {
+    return this.hasNonEmptyFrontmatterField(file, "AI_take");
+  }
+
   hasNonEmptyTitle(file) {
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter || {};
     const value = fm.AI_title;
@@ -2533,6 +2603,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
         summaryLongDone: Boolean(fingerprint) && record.lastSummaryLongHash === fingerprint,
         tagsDone: Boolean(fingerprint) && record.lastTagsHash === fingerprint,
         technicalDepthDone: Boolean(fingerprint) && record.lastTechnicalDepthHash === fingerprint,
+        takeDone: Boolean(fingerprint) && record.lastTakeHash === fingerprint,
         qaDone: Boolean(fingerprint) && record.lastQaHash === fingerprint,
       };
     }
@@ -2542,6 +2613,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
       summaryLongDone: this.hasNonEmptySummaryLong(file),
       tagsDone: this.hasNonEmptyTags(file),
       technicalDepthDone: this.hasValidTechnicalDepth(file),
+      takeDone: this.hasNonEmptyTake(file),
       qaDone: this.hasNonEmptyQa(file),
     };
   }
@@ -2556,6 +2628,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
       delete record.lastSummaryLongHash;
       delete record.lastTagsHash;
       delete record.lastTechnicalDepthHash;
+      delete record.lastTakeHash;
       delete record.lastQaHash;
       delete record.lastTitleHash;
     }
@@ -2576,6 +2649,8 @@ module.exports = class AiMetadataPlugin extends Plugin {
         else delete record.lastTagsHash;
         if (this.hasValidTechnicalDepth(file)) record.lastTechnicalDepthHash = fingerprint;
         else delete record.lastTechnicalDepthHash;
+        if (this.hasNonEmptyTake(file)) record.lastTakeHash = fingerprint;
+        else delete record.lastTakeHash;
         if (this.hasNonEmptyQa(file)) record.lastQaHash = fingerprint;
         else delete record.lastQaHash;
         if (this.hasNonEmptyTitle(file)) record.lastTitleHash = fingerprint;
@@ -2592,7 +2667,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
     const kinds = Array.isArray(kindOrKinds)
       ? kindOrKinds
       : kindOrKinds === "all"
-        ? ["summary_short", "summary_long", "tags", "technical_depth", "qa", "ai_title"]
+        ? ["summary_short", "summary_long", "tags", "technical_depth", "take", "qa", "ai_title"]
         : [kindOrKinds];
 
     if (this.settings.contentFingerprintEnabled === true) {
@@ -2600,6 +2675,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
       if (kinds.includes("summary_long")) record.lastSummaryLongHash = fingerprint;
       if (kinds.includes("tags")) record.lastTagsHash = fingerprint;
       if (kinds.includes("technical_depth")) record.lastTechnicalDepthHash = fingerprint;
+      if (kinds.includes("take")) record.lastTakeHash = fingerprint;
       if (kinds.includes("qa")) record.lastQaHash = fingerprint;
       if (kinds.includes("ai_title")) record.lastTitleHash = fingerprint;
     } else {
@@ -2608,6 +2684,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
       delete record.lastSummaryLongHash;
       delete record.lastTagsHash;
       delete record.lastTechnicalDepthHash;
+      delete record.lastTakeHash;
       delete record.lastQaHash;
       delete record.lastTitleHash;
     }
@@ -2730,7 +2807,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
       const record = this.state.files[file.path] || {};
       const body = this.stripFrontmatter(raw).trim();
       const emptyBody = !body;
-      const { titleDone, summaryShortDone, summaryLongDone, tagsDone, technicalDepthDone, qaDone } = this.getMetadataCompletion(file, fingerprint);
+      const { titleDone, summaryShortDone, summaryLongDone, tagsDone, technicalDepthDone, takeDone, qaDone } = this.getMetadataCompletion(file, fingerprint);
       return {
         file,
         folder: this.getFolderPathForFile(file),
@@ -2740,9 +2817,10 @@ module.exports = class AiMetadataPlugin extends Plugin {
         summaryLongDone,
         tagsDone,
         technicalDepthDone,
+        takeDone,
         qaDone,
         emptyBody,
-        pending: !emptyBody && (!titleDone || !summaryShortDone || !summaryLongDone || !tagsDone || !technicalDepthDone || !qaDone),
+        pending: !emptyBody && (!titleDone || !summaryShortDone || !summaryLongDone || !tagsDone || !technicalDepthDone || !takeDone || !qaDone),
         preview: includePreview ? (emptyBody ? "（无可分析正文）" : this.makeNotePreview(raw)) : "",
         lastError: emptyBody ? "" : (record.lastError || ""),
         lastErrorType: record.lastErrorType || "",
@@ -2759,6 +2837,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
         summaryLongDone: false,
         tagsDone: false,
         technicalDepthDone: false,
+        takeDone: false,
         qaDone: false,
         pending: true,
         preview: "读取预览失败",
@@ -2863,17 +2942,11 @@ module.exports = class AiMetadataPlugin extends Plugin {
 
   async exportWhitelistFolder() {
     const root = this.normalizeWhitelistFolder();
-    const exportRoot = String(this.settings.exportFolderName || "00_docs_待AI审查").trim() || "00_docs_待AI审查";
-    const samplePath = String(this.settings.exportSampleFile || "").trim();
+    const exportRoot = "AI元数据导出副本";
     const files = this.getNotesFiles().filter((file) => this.getMetadataStatus(file) === "done");
 
-    if (exportRoot === root) {
-      new Notice("xyblue135 私人·AI 元数据：导出目录不能与白名单目录相同");
-      return;
-    }
-
     if (!files.length) {
-      new Notice("xyblue135 私人·AI 元数据：" + root + " 目录下没有 status: done 的 Markdown 文件");
+      new Notice("xyblue135 私人·AI 元数据：" + root + " 目录下没有 Markdown 文件");
       return;
     }
 
@@ -2898,16 +2971,6 @@ module.exports = class AiMetadataPlugin extends Plugin {
       copied += 1;
     }
 
-    let sampleCopied = false;
-    if (samplePath) {
-      const sampleFile = this.app.vault.getAbstractFileByPath(samplePath);
-      if (sampleFile instanceof TFile && sampleFile.extension === "md") {
-        const sampleContent = await this.app.vault.read(sampleFile);
-        await this.app.vault.create(exportRoot + "/_样本示例.md", sampleContent);
-        sampleCopied = true;
-      }
-    }
-
     const depthHarness = this.renderHarness(this.settings.technicalDepthHarness || DEFAULT_TECHNICAL_DEPTH_HARNESS);
     const depthOutputIndex = depthHarness.indexOf("## 输出格式");
     const depthRubric = (depthOutputIndex >= 0 ? depthHarness.slice(0, depthOutputIndex) : depthHarness.replace("{{ARTICLE}}", "")).trim();
@@ -2921,13 +2984,9 @@ module.exports = class AiMetadataPlugin extends Plugin {
       "",
       "---",
       "",
-      sampleCopied
-        ? "> 本目录下的「_样本示例.md」是一篇已经完成元数据的范例，请严格参照它的字段结构、命名和写作风格，为其余笔记补全元数据。"
-        : "> 如需参考格式，请以每篇笔记已有的 frontmatter 与各字段说明为准。",
-      "",
       "你是精通技术写作与知识管理的中文 AI 助手。本文件夹里有多个 Markdown 笔记，请逐篇阅读正文，为每篇笔记补全一组元数据，并以 YAML frontmatter 直接写在该笔记文件顶部（不要改动正文、不要输出分析过程、不要用严格 JSON 包装）。",
       "",
-      "共 6 个字段，顺序固定：AI_title → AI_tags → AI_summary_short → AI_summary_long → AI_technical_depth → AI_qa。",
+      "共 7 个字段，顺序固定：AI_title → AI_tags → AI_summary_short → AI_summary_long → AI_technical_depth → AI_take → AI_qa。",
       "",
       "========== 字段 1：AI_title（参考标题） ==========",
       this.renderHarness(this.settings.aiTitleHarness || DEFAULT_AI_TITLE_HARNESS),
@@ -2948,7 +3007,10 @@ module.exports = class AiMetadataPlugin extends Plugin {
       "",
       "该字段最终只输出一个 0～100 的整数。",
       "",
-      "========== 字段 6：AI_qa（面试问答） ==========",
+      "========== 字段 6：AI_take（客观评价） ==========",
+      this.renderHarness(this.settings.takeHarness || DEFAULT_TAKE_HARNESS),
+      "",
+      "========== 字段 7：AI_qa（面试问答） ==========",
       this.renderHarness(this.settings.qaHarness || DEFAULT_QA_HARNESS),
       "",
       "========== 输出格式（宽松） ==========",
@@ -2968,6 +3030,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
       "AI_summary_short: 一句话短摘要",
       "AI_summary_long: 详细摘要，可多句。",
       "AI_technical_depth: 60",
+      "AI_take: 一段简短客观评价",
       "AI_qa: |",
       "  Q: 问题一",
       "  A: 回答一",
@@ -3104,6 +3167,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
             summaryLongDone: info.summaryLongDone,
             tagsDone: info.tagsDone,
             technicalDepthDone: info.technicalDepthDone,
+            takeDone: info.takeDone,
             qaDone: info.qaDone,
           });
         }
@@ -3174,11 +3238,12 @@ module.exports = class AiMetadataPlugin extends Plugin {
           if (!queued.summaryLongDone) missingKinds.push("summary_long");
           if (!queued.tagsDone) missingKinds.push("tags");
           if (!queued.technicalDepthDone) missingKinds.push("technical_depth");
+          if (!queued.takeDone) missingKinds.push("take");
           if (!queued.qaDone) missingKinds.push("qa");
           if (missingKinds.length) {
             await this.generateSelectedForFile(file, missingKinds, "manual-folder", progress, taskContext);
           } else {
-            skippedFiles.push({ path: file.path, message: "AI_title / AI_summary_short / AI_summary_long / AI_tags / AI_technical_depth / AI_qa 已有内容", kind: "already-complete" });
+            skippedFiles.push({ path: file.path, message: "AI_title / AI_summary_short / AI_summary_long / AI_tags / AI_technical_depth / AI_take / AI_qa 已有内容", kind: "already-complete" });
             continue;
           }
           processedFiles.push(file.path);
@@ -3319,8 +3384,8 @@ module.exports = class AiMetadataPlugin extends Plugin {
         }
         try {
           const prepared = await this.prepareFile(file);
-          const { titleDone, summaryShortDone, summaryLongDone, tagsDone, technicalDepthDone, qaDone } = this.getMetadataCompletion(file, prepared.fingerprint);
-          if (titleDone && summaryShortDone && summaryLongDone && tagsDone && technicalDepthDone && qaDone) {
+          const { titleDone, summaryShortDone, summaryLongDone, tagsDone, technicalDepthDone, takeDone, qaDone } = this.getMetadataCompletion(file, prepared.fingerprint);
+          if (titleDone && summaryShortDone && summaryLongDone && tagsDone && technicalDepthDone && takeDone && qaDone) {
             skipped += 1;
             continue;
           }
@@ -3337,6 +3402,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
             if (!summaryLongDone) missingKinds.push("summary_long");
             if (!tagsDone) missingKinds.push("tags");
             if (!technicalDepthDone) missingKinds.push("technical_depth");
+            if (!takeDone) missingKinds.push("take");
             if (!qaDone) missingKinds.push("qa");
             if (missingKinds.length) {
               await this.generateSelectedForFile(file, missingKinds, "auto", progress, taskContext);
@@ -3445,6 +3511,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
       else if (kind === "summary_long") button.setAttribute("aria-label", "AI 只生成 AI_summary_long");
       else if (kind === "tags") button.setAttribute("aria-label", "AI 只生成 weighted tags");
       else if (kind === "technical_depth") button.setAttribute("aria-label", "AI 只评估 AI_technical_depth");
+      else if (kind === "take") button.setAttribute("aria-label", "AI 只生成客观评价 AI_take");
       else if (kind === "qa") button.setAttribute("aria-label", "AI 只生成面试问答 AI_qa");
       else if (kind === "ai_title") button.setAttribute("aria-label", "AI 只生成参考标题 AI_title");
       else button.setAttribute("aria-label", `AI 生成 ${kind}`);
@@ -3527,15 +3594,17 @@ class AiMetadataSettingTab extends PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
-    this.activeGroup = "global";
-    this.groupOrder = ["global", "ai_title", "tags", "summary_short", "summary_long", "technical_depth", "qa"];
+    this.activeGroup = "api";
+    this.groupOrder = ["api", "directory", "ai_title", "tags", "summary_short", "summary_long", "technical_depth", "take", "qa"];
     this.groupLabels = {
-      global: "全局设置（API / 扫描 / Tag 规则）",
+      api: "API 连接",
+      directory: "目录更新管理",
       ai_title: "参考标题 AI Title",
       tags: "标签 AI Tags",
       summary_short: "短摘要 AI Summary Short",
       summary_long: "长摘要 AI Summary Long",
       technical_depth: "技术深度 AI Technical Depth",
+      take: "客观评价 AI Take",
       qa: "面试问答 AI QA",
     };
   }
@@ -3625,35 +3694,7 @@ class AiMetadataSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Beta：批量合并 4 项结构化元数据请求")
-      .setDesc("默认开启，属于 Beta 功能。只作用于 summary_short、summary_long、tags 与 technical_depth 这 4 项结构化元数据：同一篇笔记用一次 /chat/completions 同时得到这 4 项；若只缺其中两项或三项，也会尽量一次请求补齐。面试问答 qa 与参考标题 ai_title 不参与合并，始终各自单独一次请求生成。Properties 中四个字段旁的 ✨ 按钮永远只生成当前字段。关闭后批量流程恢复为 4 个字段串行请求。")
-      .addToggle((toggle) => toggle.setValue(this.plugin.settings.experimentalCombinedRequestEnabled === true).onChange(async (value) => {
-        this.plugin.settings.experimentalCombinedRequestEnabled = value;
-        await this.plugin.saveAllData();
-        this.plugin.refreshStatusBar();
-        this.plugin.clearInjectedButtons();
-        this.plugin.scheduleInjection();
-      }));
-
-    new Setting(containerEl)
-      .setName("结构化 JSON 模式")
-      .setDesc("默认开启。对需要 JSON 的 Tags / Technical Depth / 合并请求发送 OpenAI-compatible response_format=json_object，让模型从 API 层优先返回合法 JSON；如果你的代理不支持该字段，可以关闭。")
-      .addToggle((toggle) => toggle.setValue(this.plugin.settings.structuredJsonModeEnabled !== false).onChange(async (value) => {
-        this.plugin.settings.structuredJsonModeEnabled = value;
-        await this.plugin.saveAllData();
-      }));
-
-    new Setting(containerEl)
-      .setName("JSON 修复分支")
-      .setDesc("默认开启。严格 JSON.parse 失败时，先在本地做保守修复（缺失对象逗号、尾随逗号、字符串内未转义换行等）并再次解析；关闭后直接进入一次自动结构重试，不执行本地修复。")
-      .addToggle((toggle) => toggle.setValue(this.plugin.settings.jsonRepairEnabled === true).onChange(async (value) => {
-        this.plugin.settings.jsonRepairEnabled = value;
-        await this.plugin.saveAllData();
-      }));
-
-    new Setting(containerEl)
-      .setName("结构化输出自动重试")
-      .setDesc("固定开启 1 次：仅在 JSON 解析、summary_short / summary_long 字段、tags 数量/合法性或 technical_depth 分项求和校验失败时重试；网络错误、HTTP 错误和超时不会因为这个分支额外重试。")
-      .addButton((button) => button.setButtonText("固定：1 次").setDisabled(true));
+      .setDesc("合并结构化请求已下线，由于错误率太高。当前自动更新与生成均改为逐字段单个请求。");
 
     new Setting(containerEl)
       .setName("测试 API")
@@ -3676,33 +3717,16 @@ class AiMetadataSettingTab extends PluginSettingTab {
     containerEl.createEl("h3", { text: "内容与 Tag 规则" });
 
     new Setting(containerEl)
-      .setName("内容指纹 fingerprint 识别")
-      .setDesc("默认关闭。关闭时只按 Properties 是否已有内容判断：summary_short、summary_long、tags、technical_depth 各自有效才视为对应字段已完成，正文后来修改也不会自动判为过期。开启后记录正文内容指纹；正文或其他非 summary/summary_short/summary_long/tags/technical_depth/position 属性变化时，相应 4 项 AI 元数据会重新进入待更新。首次开启会把当前已有有效 summary_short / summary_long / tags / technical_depth 建立为当前基线，不会立即把全部文章重新生成。关闭时会删除数据库中的持久化指纹标记。")
-      .addToggle((toggle) => toggle.setValue(this.plugin.settings.contentFingerprintEnabled === true).onChange(async (value) => {
-        toggle.setDisabled(true);
-        try {
-          this.plugin.settings.contentFingerprintEnabled = value === true;
-          if (value === true) {
-            await this.plugin.initializeFingerprintBaseline();
-            new Notice("xyblue135 私人·AI 元数据：已开启内容指纹识别，并以当前 4 项 AI 元数据建立基线");
-          } else {
-            this.plugin.clearPersistentFingerprintMarkers();
-            new Notice("xyblue135 私人·AI 元数据：已关闭内容指纹识别，数据库中的指纹标记已删除");
-          }
-          await this.plugin.saveAllData();
-          this.plugin.refreshStatusBar();
-        } finally {
-          toggle.setDisabled(false);
-        }
+      .setName("是否喂给 AI 元数据信息")
+      .setDesc("默认关闭（重要开关）。当前自动更新生成的就是元数据内容本身，不应把已有元数据内容（如 AI_tags）再喂回给 AI，请保持关闭；开启后生成 Tags 时会把已有 AI_tags 发送给 AI。")
+      .addToggle((toggle) => toggle.setValue(this.plugin.settings.feedMetadataToAiEnabled === true).onChange(async (value) => {
+        this.plugin.settings.feedMetadataToAiEnabled = value;
+        await this.plugin.saveAllData();
       }));
 
     new Setting(containerEl)
-      .setName("摘要输入 Markdown 清理")
-      .setDesc("默认关闭。开启后在发送 Summary 前清理无意义 Markdown 格式：去除标题 #、反引号/粗体/删除线/引用等格式符，保留其中的文字；删除图片嵌入和链接 URL；超过 500 字符的 fenced 代码块替换为省略提示，短代码保留。Tags 单独生成时仍使用原正文；Beta 合并时 summary_short / summary_long / tags 使用清理后的正文；technical_depth 始终读取未清理的完整正文。")
-      .addToggle((toggle) => toggle.setValue(this.plugin.settings.summaryMarkdownCleanupEnabled === true).onChange(async (value) => {
-        this.plugin.settings.summaryMarkdownCleanupEnabled = value;
-        await this.plugin.saveAllData();
-      }));
+      .setName("自动更新 Token 提示")
+      .setDesc("结构化合并请求已下线（错误率过高），自动更新改为逐字段（summary_short、summary_long、tags、technical_depth、take、qa、AI_title）单独请求生成，因此 Token 消耗比旧合并模式明显更高，请留意。");
 
     new Setting(containerEl)
       .setName("白名单目录")
@@ -3845,52 +3869,36 @@ class AiMetadataSettingTab extends PluginSettingTab {
         this.plugin.openPendingNotesDashboard();
       }));
 
-    new Setting(containerEl)
-      .setName("导出目录名")
-      .setDesc("导出 00_docs 中 status: done 文章副本时所用的目标目录名。默认 00_docs_待AI审查。")
-      .addText((text) => text.setValue(this.plugin.settings.exportFolderName || "00_docs_待AI审查").onChange(async (value) => {
-        this.plugin.settings.exportFolderName = value.trim() || "00_docs_待AI审查";
-        await this.plugin.saveAllData();
-      }));
-
-    new Setting(containerEl)
-      .setName("导出样本文件")
-      .setDesc("可选：手工选择一个已完成元数据的 Markdown 作为样本，导出时随目录附带为 _样本示例.md；留空则不附带。")
-      .addText((text) => text.setValue(this.plugin.settings.exportSampleFile || "").setPlaceholder("留空 = 不附带样本").onChange(async (value) => {
-        this.plugin.settings.exportSampleFile = value.trim();
-        await this.plugin.saveAllData();
-      }))
-      .addButton((button) => button.setButtonText("选择文件").onClick(() => {
-        new ExportSamplePickerModal(this.app, this.plugin, (path) => {
-          this.plugin.settings.exportSampleFile = path;
-          void this.plugin.saveAllData();
-          this.display();
-        }).open();
-      }))
-      .addButton((button) => button.setButtonText("清空").onClick(async () => {
-        this.plugin.settings.exportSampleFile = "";
-        await this.plugin.saveAllData();
-        this.display();
-      }));
-
-    const provenance = containerEl.createEl("details", { cls: "ai-metadata-settings-details" });
-    provenance.createEl("summary", { text: "更新来源识别规则" });
-    provenance.createEl("div", {
-      cls: "setting-item-description",
-      text: "默认关闭内容指纹识别：summary_short/summary_long/tags/technical_depth 只要已有有效内容就视为完成，不再因为正文变化自动判为过期；此模式不会在数据库保存 hash 指纹。开启 fingerprint 后，插件才会持久化去除 summary/summary_short/summary_long/tags/technical_depth/position 后的源指纹，并用它识别正文变化。插件自身写入仍记录为 ai-plugin。",
-    });
-
     containerEl.createEl("h3", { text: "高级输出约束" });
+
+    let summaryShortCharInput;
     new Setting(containerEl)
-      .setName("短摘要语义约束（Summary Short Harness）")
-      .setDesc("控制 summary_short 的语义与写作风格。支持 {{summaryShortMaxChars}}。")
-      .addToggle((toggle) => toggle.setValue(this.plugin.settings.summaryShortHarnessEnabled !== false).onChange(async (value) => {
-        this.plugin.settings.summaryShortHarnessEnabled = value;
-        await this.plugin.saveAllData();
-      }));
+      .setName("短摘要最大字符数（summary_short）")
+      .setDesc("默认 100。推荐 70～120，用于文章列表、搜索结果和快速预览。")
+      .addToggle((toggle) => {
+        toggle.setValue(this.plugin.settings.summaryShortMaxCharsEnabled !== false);
+        toggle.onChange(async (value) => {
+          this.plugin.settings.summaryShortMaxCharsEnabled = value;
+          if (summaryShortCharInput) summaryShortCharInput.disabled = !value;
+          await this.plugin.saveAllData();
+        });
+      })
+      .addText((text) => {
+        summaryShortCharInput = text.inputEl;
+        text.inputEl.type = "number";
+        text.inputEl.disabled = this.plugin.settings.summaryShortMaxCharsEnabled === false;
+        text.setValue(String(this.plugin.settings.summaryShortMaxChars)).onChange(async (value) => {
+          const next = Number.parseInt(value, 10);
+          if (Number.isFinite(next) && next >= 30 && next <= 300) {
+            this.plugin.settings.summaryShortMaxChars = next;
+            await this.plugin.saveAllData();
+          }
+        });
+      });
 
     new Setting(containerEl)
       .setName("短摘要语义约束内容")
+      .setClass("ai-metadata-setting-stacked")
       .addTextArea((area) => {
         area.inputEl.rows = 8;
         area.inputEl.addClass("ai-metadata-harness-textarea");
@@ -3898,23 +3906,37 @@ class AiMetadataSettingTab extends PluginSettingTab {
           this.plugin.settings.summaryShortHarness = value;
           await this.plugin.saveAllData();
         });
-      })
-      .addButton((button) => button.setButtonText("恢复默认").onClick(async () => {
-        this.plugin.settings.summaryShortHarness = DEFAULT_SUMMARY_SHORT_HARNESS;
-        await this.plugin.saveAllData();
-        this.display();
-      }));
+      });
 
+
+    let summaryLongCharInput;
     new Setting(containerEl)
-      .setName("长摘要语义约束（Summary Long Harness）")
-      .setDesc("控制 summary_long 的文章结构概览。支持 {{summaryLongMaxChars}}；默认强调背景→排查/依据→判断→方案→风险/限制。")
-      .addToggle((toggle) => toggle.setValue(this.plugin.settings.summaryLongHarnessEnabled !== false).onChange(async (value) => {
-        this.plugin.settings.summaryLongHarnessEnabled = value;
-        await this.plugin.saveAllData();
-      }));
+      .setName("长摘要最大字符数（summary_long）")
+      .setDesc("默认 300。推荐 250～320，用于理解文章结构、AI 排序、RAG 和技术含量判断。")
+      .addToggle((toggle) => {
+        toggle.setValue(this.plugin.settings.summaryLongMaxCharsEnabled !== false);
+        toggle.onChange(async (value) => {
+          this.plugin.settings.summaryLongMaxCharsEnabled = value;
+          if (summaryLongCharInput) summaryLongCharInput.disabled = !value;
+          await this.plugin.saveAllData();
+        });
+      })
+      .addText((text) => {
+        summaryLongCharInput = text.inputEl;
+        text.inputEl.type = "number";
+        text.inputEl.disabled = this.plugin.settings.summaryLongMaxCharsEnabled === false;
+        text.setValue(String(this.plugin.settings.summaryLongMaxChars)).onChange(async (value) => {
+          const next = Number.parseInt(value, 10);
+          if (Number.isFinite(next) && next >= 100 && next <= 1000) {
+            this.plugin.settings.summaryLongMaxChars = next;
+            await this.plugin.saveAllData();
+          }
+        });
+      });
 
     new Setting(containerEl)
       .setName("长摘要语义约束内容")
+      .setClass("ai-metadata-setting-stacked")
       .addTextArea((area) => {
         area.inputEl.rows = 13;
         area.inputEl.addClass("ai-metadata-harness-textarea");
@@ -3922,12 +3944,7 @@ class AiMetadataSettingTab extends PluginSettingTab {
           this.plugin.settings.summaryLongHarness = value;
           await this.plugin.saveAllData();
         });
-      })
-      .addButton((button) => button.setButtonText("恢复默认").onClick(async () => {
-        this.plugin.settings.summaryLongHarness = DEFAULT_SUMMARY_LONG_HARNESS;
-        await this.plugin.saveAllData();
-        this.display();
-      }));
+      });
 
     new Setting(containerEl)
       .setName("标签值安全约束（固定）")
@@ -3936,16 +3953,10 @@ class AiMetadataSettingTab extends PluginSettingTab {
         new Notice(TAG_VALUE_SAFETY_PROTOCOL, 10000);
       }));
 
-    new Setting(containerEl)
-      .setName("标签语义约束（Tags Harness）")
-      .setDesc("这里控制可编辑的标签语义约束。关闭后固定的 Tag Value Safety Harness、weighted JSON 协议和本地合法性 validator 仍然生效。支持 {{maxTags}}。")
-      .addToggle((toggle) => toggle.setValue(this.plugin.settings.tagsHarnessEnabled).onChange(async (value) => {
-        this.plugin.settings.tagsHarnessEnabled = value;
-        await this.plugin.saveAllData();
-      }));
 
     new Setting(containerEl)
       .setName("标签语义约束内容")
+      .setClass("ai-metadata-setting-stacked")
       .addTextArea((area) => {
         area.inputEl.rows = 9;
         area.inputEl.addClass("ai-metadata-harness-textarea");
@@ -3953,23 +3964,12 @@ class AiMetadataSettingTab extends PluginSettingTab {
           this.plugin.settings.tagsHarness = value;
           await this.plugin.saveAllData();
         });
-      })
-      .addButton((button) => button.setButtonText("恢复默认").onClick(async () => {
-        this.plugin.settings.tagsHarness = DEFAULT_TAGS_HARNESS;
-        await this.plugin.saveAllData();
-        this.display();
-      }));
+      });
 
-    new Setting(containerEl)
-      .setName("技术深度评分约束（Technical Depth Prompt）")
-      .setDesc("默认开启。完整阅读文章全文后按 0～100 固定尺度评分；单字段和 Beta 合并请求都会校验五个维度的整数范围及分项之和。最终只写入 frontmatter 的 technical_depth 总分。支持 {{ARTICLE}} 作为全文占位符。")
-      .addToggle((toggle) => toggle.setValue(this.plugin.settings.technicalDepthHarnessEnabled !== false).onChange(async (value) => {
-        this.plugin.settings.technicalDepthHarnessEnabled = value;
-        await this.plugin.saveAllData();
-      }));
 
     new Setting(containerEl)
       .setName("技术深度评分 Prompt")
+      .setClass("ai-metadata-setting-stacked")
       .setDesc("默认即当前 5 维 technical_depth 评分标准。单独生成时 {{ARTICLE}} 会替换为完整正文；Beta 合并时复用评分规则，并将评分明细嵌入合并 JSON。")
       .addTextArea((area) => {
         area.inputEl.rows = 22;
@@ -3978,26 +3978,37 @@ class AiMetadataSettingTab extends PluginSettingTab {
           this.plugin.settings.technicalDepthHarness = value;
           await this.plugin.saveAllData();
         });
-      })
-      .addButton((button) => button.setButtonText("恢复默认").onClick(async () => {
-        this.plugin.settings.technicalDepthHarness = DEFAULT_TECHNICAL_DEPTH_HARNESS;
-        await this.plugin.saveAllData();
-        this.display();
-      }));
+      });
+
 
     new Setting(containerEl)
-      .setName("面试问答约束（QA Harness）")
-      .setDesc("控制 qa 面试问答的命题方向与作答风格，输出 Q/A 交替纯文本。支持 {{maxQuestions}}。")
-      .addToggle((toggle) => toggle.setValue(this.plugin.settings.qaHarnessEnabled !== false).onChange(async (value) => {
-        this.plugin.settings.qaHarnessEnabled = value;
-        await this.plugin.saveAllData();
-      }));
+      .setName("客观评价约束内容")
+      .setClass("ai-metadata-setting-stacked")
+      .addTextArea((area) => {
+        area.inputEl.rows = 10;
+        area.inputEl.addClass("ai-metadata-harness-textarea");
+        area.setValue(this.plugin.settings.takeHarness || DEFAULT_TAKE_HARNESS).onChange(async (value) => {
+          this.plugin.settings.takeHarness = value;
+          await this.plugin.saveAllData();
+        });
+      });
 
+    let qaCountInput;
     new Setting(containerEl)
       .setName("面试题目数量")
-      .setDesc("每次生成多少道面试题，默认 5，范围 1～20。")
+      .setDesc("启用后每次生成固定数量面试题（默认 5，范围 1～20）；关闭则由 QA 约束内容自行决定题数。")
+      .addToggle((toggle) => {
+        toggle.setValue(this.plugin.settings.qaMaxQuestionsEnabled === true);
+        toggle.onChange(async (value) => {
+          this.plugin.settings.qaMaxQuestionsEnabled = value;
+          if (qaCountInput) qaCountInput.disabled = !value;
+          await this.plugin.saveAllData();
+        });
+      })
       .addText((text) => {
+        qaCountInput = text.inputEl;
         text.inputEl.type = "number";
+        text.inputEl.disabled = this.plugin.settings.qaMaxQuestionsEnabled !== true;
         text.setValue(String(this.plugin.settings.qaMaxQuestions)).onChange(async (value) => {
           const next = Number.parseInt(value, 10);
           if (Number.isFinite(next) && next >= 1 && next <= 20) {
@@ -4009,6 +4020,7 @@ class AiMetadataSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("面试问答约束内容")
+      .setClass("ai-metadata-setting-stacked")
       .addTextArea((area) => {
         area.inputEl.rows = 10;
         area.inputEl.addClass("ai-metadata-harness-textarea");
@@ -4016,26 +4028,25 @@ class AiMetadataSettingTab extends PluginSettingTab {
           this.plugin.settings.qaHarness = value;
           await this.plugin.saveAllData();
         });
-      })
-      .addButton((button) => button.setButtonText("恢复默认").onClick(async () => {
-        this.plugin.settings.qaHarness = DEFAULT_QA_HARNESS;
-        await this.plugin.saveAllData();
-        this.display();
-      }));
+      });
 
-    new Setting(containerEl)
-      .setName("参考标题约束（AI Title Harness）")
-      .setDesc("控制 AI_title 参考标题的选题方向与风格，输出纯文本标题列表。支持 {{maxItems}}。")
-      .addToggle((toggle) => toggle.setValue(this.plugin.settings.aiTitleHarnessEnabled !== false).onChange(async (value) => {
-        this.plugin.settings.aiTitleHarnessEnabled = value;
-        await this.plugin.saveAllData();
-      }));
 
+    let aiTitleCountInput;
     new Setting(containerEl)
       .setName("参考标题数量")
-      .setDesc("每次生成多少个参考标题，默认 5，范围 1～20。以 YAML 数组写入 frontmatter 的 AI_title。")
+      .setDesc("每次生成多少参考标题，默认 5，范围 1～20。以 YAML 数组写入 frontmatter 的 AI_title。关闭后由 AI Title 约束内容自行决定数量。")
+      .addToggle((toggle) => {
+        toggle.setValue(this.plugin.settings.aiTitleMaxItemsEnabled !== false);
+        toggle.onChange(async (value) => {
+          this.plugin.settings.aiTitleMaxItemsEnabled = value;
+          if (aiTitleCountInput) aiTitleCountInput.disabled = !value;
+          await this.plugin.saveAllData();
+        });
+      })
       .addText((text) => {
+        aiTitleCountInput = text.inputEl;
         text.inputEl.type = "number";
+        text.inputEl.disabled = this.plugin.settings.aiTitleMaxItemsEnabled === false;
         text.setValue(String(this.plugin.settings.aiTitleMaxItems)).onChange(async (value) => {
           const next = Number.parseInt(value, 10);
           if (Number.isFinite(next) && next >= 1 && next <= 20) {
@@ -4047,6 +4058,7 @@ class AiMetadataSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("参考标题约束内容")
+      .setClass("ai-metadata-setting-stacked")
       .addTextArea((area) => {
         area.inputEl.rows = 9;
         area.inputEl.addClass("ai-metadata-harness-textarea");
@@ -4054,47 +4066,13 @@ class AiMetadataSettingTab extends PluginSettingTab {
           this.plugin.settings.aiTitleHarness = value;
           await this.plugin.saveAllData();
         });
-      })
-      .addButton((button) => button.setButtonText("恢复默认").onClick(async () => {
-        this.plugin.settings.aiTitleHarness = DEFAULT_AI_TITLE_HARNESS;
-        await this.plugin.saveAllData();
-        this.display();
-      }));
-
-    containerEl.createEl("h3", { text: "摘要参数" });
-    new Setting(containerEl)
-      .setName("短摘要最大字符数（summary_short）")
-      .setDesc("默认 100。推荐 70～120，用于文章列表、搜索结果和快速预览。")
-      .addText((text) => {
-        text.inputEl.type = "number";
-        text.setValue(String(this.plugin.settings.summaryShortMaxChars)).onChange(async (value) => {
-          const next = Number.parseInt(value, 10);
-          if (Number.isFinite(next) && next >= 30 && next <= 300) {
-            this.plugin.settings.summaryShortMaxChars = next;
-            await this.plugin.saveAllData();
-          }
-        });
-      });
-
-    new Setting(containerEl)
-      .setName("长摘要最大字符数（summary_long）")
-      .setDesc("默认 300。推荐 250～320，用于理解文章结构、AI 排序、RAG 和技术含量判断。")
-      .addText((text) => {
-        text.inputEl.type = "number";
-        text.setValue(String(this.plugin.settings.summaryLongMaxChars)).onChange(async (value) => {
-          const next = Number.parseInt(value, 10);
-          if (Number.isFinite(next) && next >= 100 && next <= 1000) {
-            this.plugin.settings.summaryLongMaxChars = next;
-            await this.plugin.saveAllData();
-          }
-        });
       });
 
     this.decorateSettingsPanel(containerEl);
   }
 
   decorateSettingsPanel(containerEl) {
-    if (typeof this.activeGroup !== "string") this.activeGroup = "global";
+    if (typeof this.activeGroup !== "string") this.activeGroup = "api";
 
     const buckets = {};
     for (const key of this.groupOrder) buckets[key] = [];
@@ -4139,57 +4117,46 @@ class AiMetadataSettingTab extends PluginSettingTab {
     if (node.matches("details")) {
       const summary = node.querySelector("summary");
       const text = (summary && summary.textContent || "").trim();
-      if (text.startsWith("更新来源识别规则")) return "global";
       if (text.startsWith("查看本地 Tag 索引")) return "tags";
-      return "global";
+      return "api";
     }
     const nameEl = node.querySelector(".setting-item-name");
     const name = (nameEl && nameEl.textContent || "").trim();
     const map = {
-      "API 基础地址（Base URL）": "global",
-      "API 密钥（API Key）": "global",
-      "模型（Model）": "global",
-      "API 请求超时（秒）": "global",
-      "API 请求间隔（秒）": "global",
-      "Beta：批量合并 4 项结构化元数据请求": "global",
-      "结构化 JSON 模式": "global",
-      "JSON 修复分支": "global",
-      "结构化输出自动重试": "global",
-      "测试 API": "global",
-      "内容指纹 fingerprint 识别": "global",
-      "摘要输入 Markdown 清理": "global",
-      "白名单目录": "global",
-      "显示 AI 状态": "global",
-      "元数据 status 校验": "global",
-      "自动触发更新": "global",
-      "自动更新频率（分钟）": "global",
-      "待更新笔记 / 文件夹识别": "global",
-      "导出目录名": "global",
-      "导出样本文件": "global",
+      "API 基础地址（Base URL）": "api",
+      "API 密钥（API Key）": "api",
+      "模型（Model）": "api",
+      "API 请求超时（秒）": "api",
+      "API 请求间隔（秒）": "api",
+      "Beta：批量合并 4 项结构化元数据请求": "api",
+      "测试 API": "api",
+      "是否喂给 AI 元数据信息": "directory",
+      "自动更新 Token 提示": "directory",
+      "白名单目录": "directory",
+      "显示 AI 状态": "directory",
+      "元数据 status 校验": "directory",
+      "自动触发更新": "directory",
+      "自动更新频率（分钟）": "directory",
+      "待更新笔记 / 文件夹识别": "directory",
       "标签数量（Tags）": "tags",
       "本地 Tag 索引": "tags",
       "标签大小写规范化（Tag）": "tags",
       "技术词规范表": "tags",
       "整理已有 Tag 大小写冲突": "tags",
       "标签值安全约束（固定）": "tags",
-      "标签语义约束（Tags Harness）": "tags",
       "标签语义约束内容": "tags",
-      "短摘要语义约束（Summary Short Harness）": "summary_short",
       "短摘要语义约束内容": "summary_short",
       "短摘要最大字符数（summary_short）": "summary_short",
-      "长摘要语义约束（Summary Long Harness）": "summary_long",
       "长摘要语义约束内容": "summary_long",
       "长摘要最大字符数（summary_long）": "summary_long",
-      "技术深度评分约束（Technical Depth Prompt）": "technical_depth",
       "技术深度评分 Prompt": "technical_depth",
-      "参考标题约束（AI Title Harness）": "ai_title",
+      "客观评价约束内容": "take",
       "参考标题数量": "ai_title",
       "参考标题约束内容": "ai_title",
-      "面试问答约束（QA Harness）": "qa",
       "面试题目数量": "qa",
       "面试问答约束内容": "qa",
     };
-    return map[name] || "global";
+    return map[name] || "api";
   }
 
   _buildGroupNav(containerEl) {
@@ -4652,41 +4619,3 @@ class PendingNotesDashboardModal extends Modal {
   }
 }
 
-
-class ExportSamplePickerModal extends Modal {
-  constructor(app, plugin, onPick) {
-    super(app);
-    this.plugin = plugin;
-    this.onPick = onPick;
-  }
-
-  onOpen() {
-    const { contentEl } = this;
-    contentEl.empty();
-    contentEl.createEl("h2", { text: "选择导出样本文件" });
-    contentEl.createEl("p", {
-      cls: "setting-item-description",
-      text: "选择一个已完成元数据的 Markdown 作为样本；它将随导出目录附带为 _样本示例.md。",
-    });
-
-    const files = this.plugin.getNotesFiles().filter((file) => this.plugin.getMetadataStatus(file) === "done");
-    if (!files.length) {
-      contentEl.createEl("p", { text: "白名单目录中没有 status: done 的 Markdown。" });
-      return;
-    }
-
-    const list = contentEl.createDiv({ cls: "ai-metadata-sample-list" });
-    for (const file of files) {
-      const row = list.createDiv({ cls: "ai-metadata-sample-row" });
-      row.setText(file.path);
-      row.addEventListener("click", () => {
-        this.onPick(file.path);
-        this.close();
-      });
-    }
-  }
-
-  onClose() {
-    this.contentEl.empty();
-  }
-}

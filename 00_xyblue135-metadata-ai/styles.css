@@ -631,12 +631,13 @@
   border: 1px solid var(--background-modifier-border);
   border-radius: 14px;
   background: var(--background-primary-alt);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .ai-metadata-settings-card > h3 {
   margin: 0 -16px;
   padding: 13px 16px 12px;
+  border-radius: 13px 13px 0 0;
   border-bottom: 1px solid var(--background-modifier-border);
   background: var(--background-secondary);
   font-size: 1.03em;
@@ -674,11 +675,11 @@
 .ai-metadata-settings-card input[type="text"],
 .ai-metadata-settings-card input[type="password"],
 .ai-metadata-settings-card input[type="number"] {
-  min-width: min(300px, 38vw);
+  min-width: min(300px, 100%);
 }
 
 .ai-metadata-settings-card textarea.ai-metadata-harness-textarea {
-  width: min(720px, 58vw);
+  width: min(100%, 720px);
   min-height: 120px;
   border-radius: var(--radius-m);
 }
@@ -734,4 +735,26 @@
     min-width: 0;
     width: min(100%, 560px);
   }
+}
+/* AI 提示词设置项：说明在上、输入框在下（上下布局，避免左侧说明挤压输入区） */
+.ai-metadata-settings-card .setting-item.ai-metadata-setting-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.ai-metadata-settings-card .setting-item.ai-metadata-setting-stacked .setting-item-info {
+  width: 100%;
+  margin-right: 0;
+}
+
+.ai-metadata-settings-card .setting-item.ai-metadata-setting-stacked .setting-item-control {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.ai-metadata-settings-card .setting-item.ai-metadata-setting-stacked textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
 }
