@@ -8,7 +8,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const obsidian_1 = require("obsidian");
 
 /** 插件自带的默认笔记模板。用户可以在设置页中直接修改。 */
-const DEFAULT_TEMPLATE = "---\nsummary:\ntags: []\ncreated: {{timestamp}}\nupdated: {{timestamp}}\nstatus: undone\nvisibility: unopen\nchar_count: 0\ntoken_count: 0\n---\n\n";
+const DEFAULT_TEMPLATE = "---\nsummary:\ntags: []\ncreated: {{timestamp}}\nupdated: {{timestamp}}\nstatus: undone\nvisibility: unopen\ntoken_count: 0\n---\n\n";
 /** 插件默认设置。首次安装或缺少字段时会使用这些值。 */
 const DEFAULT_SETTINGS = {
     menuEmoji: "📝",
