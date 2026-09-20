@@ -1,9 +1,9 @@
 {
   "id": "00_xyblue135-char-count-updater",
-  "name": "xyblue135 · 字数与 Token 统计",
-  "version": "3.1.0",
+  "name": "xyblue135 · Token 统计",
+  "version": "4.0.0",
   "minAppVersion": "1.0.0",
-  "description": "【xyblue135 开源插件】更新已有 char_count、token_count 字段，支持独立开关、黑名单和 Token 粗略估算参数。",
+  "description": "【xyblue135 开源插件】按白名单（默认 00_docs）更新已有 token_count 字段，支持中英文分倍率粗略估算。",
   "author": "xyblue135",
   "isDesktopOnly": false
 }

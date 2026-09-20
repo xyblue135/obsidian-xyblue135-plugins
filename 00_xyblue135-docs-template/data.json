@@ -1,5 +1,5 @@
 {
   "menuEmoji": "📝",
-  "noteTemplate": "---\nAI_title: []\nAI_tags: []\nAI_summary_short:\nAI_summary_long:\nAI_technical_depth:\nAI_take:\nAI_qa: \"\"\ncreated: {{timestamp}}\nupdated: {{timestamp}}\nstatus: undone\nvisibility: unopen\nchar_count: 0\ntoken_count: 0\n---\n\n",
+  "noteTemplate": "---\nstatus: \nvisibility: \nupdated: {{timestamp}}\ntoken_count: 0\nAI_title: []\nAI_tags: []\nAI_summary_short:\nAI_summary_long:\nAI_technical_depth:\nAI_take:\nAI_qa:\n---",
   "targetFolder": "/待分类"
 }

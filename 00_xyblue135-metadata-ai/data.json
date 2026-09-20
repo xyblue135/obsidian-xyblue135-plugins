@@ -1,7 +1,7 @@
 {
   "settings": {
     "baseUrl": "http://127.0.0.1:31415/v1",
-    "apiKey": "",
+    "apiKey": "freellmapi-285556100c3fe5c5ff96468bbbb3f03df9fe6bec71a588ac",
     "model": "auto",
     "whitelistFolder": "00_docs",
     "summaryShortMaxChars": 100,
@@ -16,7 +16,8 @@
     "statusDoneOnlyEnabled": true,
     "requestTimeoutSeconds": 180,
     "requestIntervalSeconds": 30,
-    "experimentalCombinedRequestEnabled": true,
+    "experimentalCombinedRequestEnabled": false,
+    "feedMetadataToAiEnabled": false,
     "structuredJsonModeEnabled": true,
     "jsonRepairEnabled": true,
     "statusBarEnabled": true,

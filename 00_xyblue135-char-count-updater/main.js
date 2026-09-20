@@ -1,7 +1,9 @@
 /*
- * xyblue135 私人 · 字数与 Token 统计
+ * xyblue135 私人 · Token 统计
  * 类型：xyblue135 私人插件（非公共发布版）
  * 说明：用户可见文案与维护注释已中文化；内部插件 ID 与 data.json 保持不变，以兼容原有设置和数据。
+ * v4.0.0：移除 char_count 字段统计；移除全部黑名单配置（全局 / 忽略文件夹 / 字段级），
+ *         改为白名单机制——仅处理白名单目录下的 Markdown（默认 00_docs 及其子笔记）。
  */
 "use strict";
 
@@ -15,17 +17,15 @@ const {
 
 const DEFAULT_SETTINGS = {
   debounceMs: 5000,
-  ignoredFolders: "",
-  globalBlacklist: "",
-  enableCharCount: true,
+  // 白名单：每行一个路径，可写文件夹（含全部子笔记）或单个文件；为空则不处理任何文件
+  whitelist: "00_docs",
   enableTokenCount: true,
   splitTokenCount: true,
   unifiedTokenFactor: 0.55,
   chineseTokenFactor: 0.5,
   englishTokenFactor: 0.25,
-  // 各字段独立黑名单（每行一个路径，匹配的文件跳过对应字段）
-  charCountBlacklist: "",
-  tokenCountBlacklist: "",
+  flushOnFileSwitch: true,
+  flushOnWindowBlur: true,
 };
 
 const MIN_DEBOUNCE_MS = 250;
@@ -67,7 +67,7 @@ class CharCountUpdaterPlugin extends Plugin {
           return;
         }
 
-        if (this.isGloballyIgnored(file.path) || this.consumeInternalWrite(file.path)) {
+        if (!this.isWhitelisted(file.path) || this.consumeInternalWrite(file.path)) {
           return;
         }
 
@@ -81,7 +81,7 @@ class CharCountUpdaterPlugin extends Plugin {
           return;
         }
 
-        if (!this.isGloballyIgnored(file.path)) {
+        if (this.isWhitelisted(file.path)) {
           this.scheduleUpdate(file);
         }
       })
@@ -206,7 +206,7 @@ class CharCountUpdaterPlugin extends Plugin {
       .split(/\r?\n/)
       .map((p) => p.trim())
       .filter(Boolean)
-      .map((p) => normalizePath(p));
+      .map((p) => normalizePath(p).replace(/\/$/, ""));
   }
 
   pathMatches(path, entry) {
@@ -215,7 +215,7 @@ class CharCountUpdaterPlugin extends Plugin {
     if (normalized === entry) {
       return true;
     }
-    // 前缀匹配文件夹路径
+    // 前缀匹配文件夹路径（含其全部子笔记）
     if (normalized.startsWith(entry + "/")) {
       return true;
     }
@@ -226,50 +226,17 @@ class CharCountUpdaterPlugin extends Plugin {
     return entries.some((entry) => this.pathMatches(path, entry));
   }
 
-  // ── 全局忽略（文件夹黑名单 + 全局黑名单） ──────────────
+  // ── 白名单（处理范围） ────────────────────────────────
 
-  isGloballyIgnored(path) {
-    // 旧的文件夹级忽略
-    if (this.isIgnored(path)) {
-      return true;
+  getWhitelist() {
+    return this.parsePathList(this.settings.whitelist);
+  }
+
+  isWhitelisted(path) {
+    const entries = this.getWhitelist();
+    if (entries.length === 0) {
+      return false;
     }
-    // 新的全局黑名单
-    const entries = this.parsePathList(this.settings.globalBlacklist);
-    return this.pathMatchesAny(path, entries);
-  }
-
-  getIgnoredFolders() {
-    return this.settings.ignoredFolders
-      .split(/\r?\n/)
-      .map((folder) => folder.trim())
-      .filter(Boolean)
-      .map((folder) => normalizePath(folder).replace(/\/$/, ""));
-  }
-
-  isIgnored(path) {
-    const normalizedPath = normalizePath(path);
-
-    return this.getIgnoredFolders().some(
-      (folder) =>
-        normalizedPath === folder || normalizedPath.startsWith(`${folder}/`)
-    );
-  }
-
-  // ── 字段级黑名单 ──────────────────────────────────────
-
-  isFieldBlacklisted(path, fieldName) {
-    let raw = "";
-    switch (fieldName) {
-      case "char_count":
-        raw = this.settings.charCountBlacklist;
-        break;
-      case "token_count":
-        raw = this.settings.tokenCountBlacklist;
-        break;
-      default:
-        return false;
-    }
-    const entries = this.parsePathList(raw);
     return this.pathMatchesAny(path, entries);
   }
 
@@ -382,7 +349,11 @@ class CharCountUpdaterPlugin extends Plugin {
   }
 
   async updateFile(file) {
-    if (!(file instanceof TFile) || file.extension !== "md" || this.isGloballyIgnored(file.path)) {
+    if (!(file instanceof TFile) || file.extension !== "md") {
+      return;
+    }
+
+    if (!this.settings.enableTokenCount || !this.isWhitelisted(file.path)) {
       return;
     }
 
@@ -393,21 +364,8 @@ class CharCountUpdaterPlugin extends Plugin {
       return;
     }
 
-    const hasCharCount = this.hasFrontmatterKey(content, "char_count");
-    const hasTokenCount = this.hasFrontmatterKey(content, "token_count");
-
-    // 字段级黑名单过滤：即使字段存在于 frontmatter，也跳过
-    const shouldHandleCharCount =
-      this.settings.enableCharCount &&
-      hasCharCount &&
-      !this.isFieldBlacklisted(file.path, "char_count");
-
-    const shouldHandleTokenCount =
-      this.settings.enableTokenCount &&
-      hasTokenCount &&
-      !this.isFieldBlacklisted(file.path, "token_count");
-
-    if (!shouldHandleCharCount && !shouldHandleTokenCount) {
+    // 只修改已存在的 token_count，字段不存在时直接跳过
+    if (!this.hasFrontmatterKey(content, "token_count")) {
       return;
     }
 
@@ -415,34 +373,19 @@ class CharCountUpdaterPlugin extends Plugin {
     const stats = this.analyzeBody(body);
     const tokenCount = this.calculateTokenCount(stats);
 
-    const existingCharCount = Number.parseInt(
-      this.readFrontmatterValue(content, "char_count") ?? "",
-      10
-    );
     const existingTokenCount = Number.parseInt(
       this.readFrontmatterValue(content, "token_count") ?? "",
       10
     );
 
-    const needsCharCount =
-      shouldHandleCharCount && existingCharCount !== stats.charCount;
-    const needsTokenCount =
-      shouldHandleTokenCount && existingTokenCount !== tokenCount;
-
-    if (!needsCharCount && !needsTokenCount) {
+    if (existingTokenCount === tokenCount) {
       return;
     }
 
     this.markInternalWrite(file.path);
 
     await this.app.fileManager.processFrontMatter(file, (metadata) => {
-      if (needsCharCount) {
-        metadata.char_count = stats.charCount;
-      }
-
-      if (needsTokenCount) {
-        metadata.token_count = tokenCount;
-      }
+      metadata.token_count = tokenCount;
     });
   }
 
@@ -466,14 +409,10 @@ class CharCountUpdaterPlugin extends Plugin {
           MAX_DEBOUNCE_MS
         )
       ),
-      ignoredFolders:
-        typeof settings.ignoredFolders === "string" ? settings.ignoredFolders : "",
-      globalBlacklist:
-        typeof settings.globalBlacklist === "string" ? settings.globalBlacklist : "",
-      enableCharCount:
-        settings.enableCharCount === undefined
-          ? DEFAULT_SETTINGS.enableCharCount
-          : Boolean(settings.enableCharCount),
+      whitelist:
+        typeof settings.whitelist === "string"
+          ? settings.whitelist
+          : DEFAULT_SETTINGS.whitelist,
       enableTokenCount:
         settings.enableTokenCount === undefined
           ? DEFAULT_SETTINGS.enableTokenCount
@@ -500,10 +439,14 @@ class CharCountUpdaterPlugin extends Plugin {
         MIN_TOKEN_FACTOR,
         MAX_TOKEN_FACTOR
       ),
-      charCountBlacklist:
-        typeof settings.charCountBlacklist === "string" ? settings.charCountBlacklist : "",
-      tokenCountBlacklist:
-        typeof settings.tokenCountBlacklist === "string" ? settings.tokenCountBlacklist : "",
+      flushOnFileSwitch:
+        settings.flushOnFileSwitch === undefined
+          ? DEFAULT_SETTINGS.flushOnFileSwitch
+          : Boolean(settings.flushOnFileSwitch),
+      flushOnWindowBlur:
+        settings.flushOnWindowBlur === undefined
+          ? DEFAULT_SETTINGS.flushOnWindowBlur
+          : Boolean(settings.flushOnWindowBlur),
     };
   }
 
@@ -527,30 +470,34 @@ class CharCountSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "xyblue135 私人 · 字数与 Token 统计" });
+    containerEl.createEl("h2", { text: "xyblue135 私人 · Token 统计" });
     containerEl.createEl("p", {
-      text: "插件只修改 YAML 中已经存在的 char_count、token_count 字段，绝不会创建字段或 frontmatter。",
+      text: "插件只修改 YAML 中已经存在的 token_count 字段，绝不会创建字段或 frontmatter。",
       cls: "setting-item-description",
     });
 
-    // ═══ ① 字段独立开关（两个字段各自独立，互不影响）═══
-    containerEl.createEl("h3", { text: "① 字段独立开关（两个字段各自独立，互不影响）" });
+    // ═══ ① 白名单（处理范围）═══
+    containerEl.createEl("h3", { text: "① 白名单（处理范围）" });
     containerEl.createEl("p", {
-      text: "下面两个开关分别控制一个字段。关掉某一个，插件就不再更新该字段，其余字段照常。默认状态：char_count / token_count 均为开。",
+      text: "只有白名单命中的文件才会被处理，其余一律跳过。每行一个 Vault 相对路径：写文件夹则包含其全部子笔记，写具体 .md 则是单个文件。白名单为空时不处理任何文件。",
       cls: "setting-item-description",
     });
 
     new Setting(containerEl)
-      .setName("字符数 · char_count")
-      .setDesc("【开】编辑后更新正文 Unicode 字符数；【关】完全不碰此字段。默认开。")
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.enableCharCount)
+      .setName("白名单目录 / 文件")
+      .setDesc("默认 00_docs（含其下全部子笔记）。每行一个路径，例如 00_docs")
+      .addTextArea((text) =>
+        text
+          .setPlaceholder("00_docs")
+          .setValue(this.plugin.settings.whitelist)
           .onChange(async (value) => {
-            this.plugin.settings.enableCharCount = value;
+            this.plugin.settings.whitelist = value;
             await this.plugin.saveSettings();
           })
       );
+
+    // ═══ ② token_count 总开关 ═══
+    containerEl.createEl("h3", { text: "② token_count 总开关" });
 
     new Setting(containerEl)
       .setName("Token 估算 · token_count")
@@ -560,52 +507,6 @@ class CharCountSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.enableTokenCount)
           .onChange(async (value) => {
             this.plugin.settings.enableTokenCount = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // ═══ ② 黑名单（全局 + 字段级）═══
-    containerEl.createEl("h3", { text: "② 黑名单（全局 + 字段级）" });
-    containerEl.createEl("p", {
-      text: "全局黑名单命中则整个文件跳过所有字段；字段级黑名单仅跳过对应字段。均支持精确文件路径或文件夹前缀匹配。",
-      cls: "setting-item-description",
-    });
-
-    new Setting(containerEl)
-      .setName("全局黑名单")
-      .setDesc("每行一个路径；匹配的文件或文件夹完全跳过所有字段。例如 0_obsidian/元数据/元数据模板")
-      .addTextArea((text) =>
-        text
-          .setPlaceholder("0_obsidian/元数据/元数据模板\n某个文件夹/")
-          .setValue(this.plugin.settings.globalBlacklist)
-          .onChange(async (value) => {
-            this.plugin.settings.globalBlacklist = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("char_count 黑名单")
-      .setDesc("仅跳过字符数统计（不影响其他字段）")
-      .addTextArea((text) =>
-        text
-          .setPlaceholder("")
-          .setValue(this.plugin.settings.charCountBlacklist)
-          .onChange(async (value) => {
-            this.plugin.settings.charCountBlacklist = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("token_count 黑名单")
-      .setDesc("仅跳过 Token 估算（不影响其他字段）")
-      .addTextArea((text) =>
-        text
-          .setPlaceholder("")
-          .setValue(this.plugin.settings.tokenCountBlacklist)
-          .onChange(async (value) => {
-            this.plugin.settings.tokenCountBlacklist = value;
             await this.plugin.saveSettings();
           })
       );
@@ -703,19 +604,6 @@ class CharCountSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.flushOnWindowBlur)
           .onChange(async (value) => {
             this.plugin.settings.flushOnWindowBlur = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("忽略的文件夹")
-      .setDesc("每行一个 Vault 相对路径；这些目录中的 Markdown 文件不会处理")
-      .addTextArea((text) =>
-        text
-          .setPlaceholder("模板\n附件\n00_AI自动分类")
-          .setValue(this.plugin.settings.ignoredFolders)
-          .onChange(async (value) => {
-            this.plugin.settings.ignoredFolders = value;
             await this.plugin.saveSettings();
           })
       );

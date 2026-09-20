@@ -1,15 +1,11 @@
 {
   "debounceMs": 5000,
-  "ignoredFolders": "",
-  "globalBlacklist": "0_obsidian/元数据/元数据模板",
-  "enableCharCount": true,
+  "whitelist": "00_docs",
   "enableTokenCount": true,
   "splitTokenCount": true,
   "unifiedTokenFactor": 0.55,
   "chineseTokenFactor": 0.5,
   "englishTokenFactor": 0.25,
   "flushOnFileSwitch": true,
-  "flushOnWindowBlur": true,
-  "charCountBlacklist": "",
-  "tokenCountBlacklist": ""
+  "flushOnWindowBlur": true
 }

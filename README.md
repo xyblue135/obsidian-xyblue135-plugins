@@ -8,7 +8,7 @@ xyblue135 自建的一组 Obsidian 插件（开放源代码），统一在此仓
 | 目录（插件 ID） | 显示名 |
 | --- | --- |
 | 00_xyblue135-metadata-ai | xyblue135 · AI 元数据 |
-| 00_xyblue135-char-count-updater | xyblue135 · 字数与 Token 统计 |
+| 00_xyblue135-char-count-updater | xyblue135 · Token 统计 |
 | 00_xyblue135-code-block-wrap | xyblue135 · 代码块增强 |
 | 00_xyblue135-docs-template | xyblue135 · 文件夹模板笔记 |
 | 00_xyblue135-files-hider | xyblue135 · 文件夹隐藏 |
