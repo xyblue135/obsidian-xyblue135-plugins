@@ -48,6 +48,16 @@
       "00_docs/01运维_0ai相关/网关/用 ESP32-S3 + FreeLLMAPI 搭建一个简单语音 AI 终端.md": {
         "lastError": "AI 生成期间笔记正文发生变化，本次结果未写入；下次会重新生成",
         "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/00_网络知识/5G核心网基础.md": {
+        "lastError": "Technical Depth 的 mechanism_depth 必须是 0～28 的整数",
+        "lastErrorType": "STRUCTURED_OUTPUT",
+        "lastRawModelOutput": "【尝试 1】\n{\n  \"technical_depth\": 0\n}\n\n【尝试 2】\n{\"technical_depth\":85}"
+      },
+      "00_docs/01运维_0网络/网卡知识/关于网卡名字前缀名的介绍.md": {
+        "lastError": "Technical Depth 的 technical_depth 必须是 0～100 的整数",
+        "lastErrorType": "STRUCTURED_OUTPUT",
+        "lastRawModelOutput": "【尝试 1】\n{ \"AI_technical_depth\": 0 }\n\n【尝试 2】\n{\"AI_technical_depth\": 50}"
       }
     }
   }

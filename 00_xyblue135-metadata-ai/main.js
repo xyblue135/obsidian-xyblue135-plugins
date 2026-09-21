@@ -746,13 +746,6 @@ module.exports = class AiMetadataPlugin extends Plugin {
       callback: () => void this.generateForActiveFile("all"),
     });
     this.addCommand({
-      id: "toggle-auto-update",
-      name: "切换 AI 元数据自动更新",
-      callback: async () => {
-        await this.setAutoUpdateEnabled(!this.settings.autoUpdateEnabled, { showNotice: true });
-      },
-    });
-    this.addCommand({
       id: "open-pending-notes-dashboard",
       name: "打开待更新元数据笔记面板",
       callback: () => this.openPendingNotesDashboard(),
@@ -962,11 +955,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
     if (status.filePath) lines.push(`当前：${status.filePath}`);
     if (status.phase) lines.push(`阶段：${status.phase}`);
     if (this.lastCycleSummary) lines.push(this.lastCycleSummary);
-    if (this.settings.autoUpdateEnabled && this.nextAutoRunAt > 0) {
-      lines.push(`下次自动检查：${this.formatRemaining(this.nextAutoRunAt - Date.now())}`);
-    } else if (!this.settings.autoUpdateEnabled) {
-      lines.push("自动更新：已关闭");
-    }
+    lines.push("模式：仅手动更新（无自动定时任务）");
     return lines.join("\n");
   }
 
@@ -998,10 +987,8 @@ module.exports = class AiMetadataPlugin extends Plugin {
       if (this.cycleMode === "manual-folder") text = "AI：文件夹同步中";
       else if (this.cycleMode === "manual-full") text = "AI：手动扫描处理中";
       else text = "AI：自动扫描中";
-    } else if (!this.settings.autoUpdateEnabled) {
-      text = "AI：自动更新已关闭";
-    } else if (this.nextAutoRunAt > 0) {
-      text = `AI：下次检查 ${this.formatRemaining(this.nextAutoRunAt - Date.now())}`;
+    } else {
+      text = "AI：仅手动模式";
     }
 
     this.statusBarItem.setText(text);
@@ -3664,7 +3651,7 @@ class AiMetadataSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("API 请求超时（秒）")
-      .setDesc("默认 180 秒（3 分钟）。每次 API 请求超过该时间，本次更新判定失败且不会写入半成品；实验合并模式下 4 项 AI 元数据合并请求共用这一次超时。")
+      .setDesc("默认 180 秒（3 分钟）。每次 API 请求（含全部手动更新：单篇命令、待更新面板逐篇重试、文件夹批量）超过该时间即判定失败且不写入半成品。本插件仅手动更新，无自动定时任务。")
       .addText((text) => {
         text.inputEl.type = "number";
         text.setValue(String(this.plugin.settings.requestTimeoutSeconds)).onChange(async (value) => {
@@ -3679,7 +3666,7 @@ class AiMetadataSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("API 请求间隔（秒）")
-      .setDesc("默认 30 秒。所有 API 请求进入同一个串行队列，绝不并发；上一请求完成后至少等待该时间才启动下一请求。实验合并模式可把同一篇笔记的 多项元数据从多次请求减少为一次。")
+      .setDesc("默认 30 秒。所有 API 请求进入同一个串行队列，绝不并发；上一请求完成后至少等待该时间才启动下一请求。所有手动更新（单篇命令、待更新面板逐篇重试、文件夹批量识别）都受此节流约束，无法快于此间隔；文件夹批量识别支持中途停止。实验合并模式可把同一篇笔记的多项元数据从多次请求减少为一次。")
       .addText((text) => {
         text.inputEl.type = "number";
         text.setValue(String(this.plugin.settings.requestIntervalSeconds)).onChange(async (value) => {
@@ -3725,8 +3712,8 @@ class AiMetadataSettingTab extends PluginSettingTab {
       }));
 
     new Setting(containerEl)
-      .setName("自动更新 Token 提示")
-      .setDesc("结构化合并请求已下线（错误率过高），自动更新改为逐字段（summary_short、summary_long、tags、technical_depth、take、qa、AI_title）单独请求生成，因此 Token 消耗比旧合并模式明显更高，请留意。");
+      .setName("Token 消耗提示")
+      .setDesc("结构化合并请求已下线（错误率过高），当前改为逐字段（summary_short、summary_long、tags、technical_depth、take、qa、AI_title）单独请求生成，因此 Token 消耗比旧合并模式明显更高，请留意。本插件仅手动更新，无自动定时任务。");
 
     new Setting(containerEl)
       .setName("白名单目录")
@@ -3828,39 +3815,6 @@ class AiMetadataSettingTab extends PluginSettingTab {
         new Notice(`xyblue135 私人·AI 元数据：批量识别范围已切换为${value ? "仅 status: done" : "全部文章"}`);
         this.display();
       }));
-
-    new Setting(containerEl)
-      .setName("自动触发更新")
-      .setDesc("默认关闭。开启后按设定频率扫描 /00_docs；关闭会清除下一次定时任务。若自动扫描正在等待 API，也会立即中止该自动任务；手动识别/同步不受影响。")
-      .addToggle((toggle) => toggle.setValue(this.plugin.settings.autoUpdateEnabled).onChange(async (value) => {
-        await this.plugin.setAutoUpdateEnabled(value);
-        this.display();
-      }))
-      .addButton((button) => {
-        const enabled = this.plugin.settings.autoUpdateEnabled === true;
-        button
-          .setButtonText(enabled ? "关闭自动更新" : "自动更新已关闭")
-          .setDisabled(!enabled)
-          .onClick(async () => {
-            await this.plugin.setAutoUpdateEnabled(false, { showNotice: true });
-            this.display();
-          });
-      });
-
-    new Setting(containerEl)
-      .setName("自动更新频率（分钟）")
-      .setDesc("默认 60 分钟。最低 5 分钟。下一轮倒计时只会在本轮全部请求与写入完成后开始；插件启动后不会立即批量请求。")
-      .addText((text) => {
-        text.inputEl.type = "number";
-        text.setValue(String(this.plugin.settings.autoUpdateMinutes)).onChange(async (value) => {
-          const next = Number.parseInt(value, 10);
-          if (Number.isFinite(next) && next >= 5 && next <= 10080) {
-            this.plugin.settings.autoUpdateMinutes = next;
-            await this.plugin.saveAllData();
-            this.plugin.restartAutoScheduler();
-          }
-        });
-      });
 
     new Setting(containerEl)
       .setName("待更新笔记 / 文件夹识别")
@@ -4068,6 +4022,41 @@ class AiMetadataSettingTab extends PluginSettingTab {
         });
       });
 
+    new Setting(containerEl)
+      .setName('导出字段与提示词 CSV')
+      .setDesc('把当前可 AI 生成的 7 个字段及其提示词（Harness）导出为 CSV 文件，便于备份或审阅。')
+      .addButton((button) => button.setButtonText('导出 CSV').onClick(async () => {
+        button.setDisabled(true).setButtonText('导出中…');
+        try {
+          const s = this.plugin.settings;
+          // 目前共 7 个可 AI 生成的字段（4 个核心元数据 + 3 个增值字段）
+          const rows = [
+            ['summary_short', '短摘要', 'summaryShortHarness', s.summaryShortHarness],
+            ['summary_long', '长摘要', 'summaryLongHarness', s.summaryLongHarness],
+            ['tags', '带权重标签', 'tagsHarness', s.tagsHarness],
+            ['technical_depth', '技术深度评分', 'technicalDepthHarness', s.technicalDepthHarness],
+            ['take', '锐评', 'takeHarness', s.takeHarness],
+            ['_qa', '面试问答', 'qaHarness', s.qaHarness],
+            ['aiTitle', '标题', 'aiTitleHarness', s.aiTitleHarness],
+          ];
+          const Q = String.fromCharCode(34);
+          const esc = (v) => Q + String(v == null ? '' : v).split(Q).join(Q + Q) + Q;
+          const csv = [['field', 'label', 'setting_key', 'prompt'], ...rows].map((r) => r.map(esc).join(',')).join('\r\n');
+          const path = 'ai-metadata-fields.csv';
+          const exist = this.app.vault.getAbstractFileByPath(path);
+          if (exist) {
+            await this.app.vault.modify(exist, csv);
+          } else {
+            await this.app.vault.create(path, csv);
+          }
+          new Notice('xyblue135 私人·AI 元数据：已导出 7 个字段的提示词到 ' + path);
+        } catch (e) {
+          new Notice('xyblue135 私人·AI 元数据：导出失败：' + (e && e.message ? e.message : String(e)));
+        } finally {
+          button.setDisabled(false).setButtonText('导出 CSV');
+        }
+      }));
+
     this.decorateSettingsPanel(containerEl);
   }
 
@@ -4131,12 +4120,10 @@ class AiMetadataSettingTab extends PluginSettingTab {
       "Beta：批量合并 4 项结构化元数据请求": "api",
       "测试 API": "api",
       "是否喂给 AI 元数据信息": "directory",
-      "自动更新 Token 提示": "directory",
+      "Token 消耗提示": "directory",
       "白名单目录": "directory",
       "显示 AI 状态": "directory",
       "元数据 status 校验": "directory",
-      "自动触发更新": "directory",
-      "自动更新频率（分钟）": "directory",
       "待更新笔记 / 文件夹识别": "directory",
       "标签数量（Tags）": "tags",
       "本地 Tag 索引": "tags",

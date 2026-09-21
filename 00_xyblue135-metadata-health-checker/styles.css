@@ -1,0 +1,215 @@
+.metadata-health-view {
+  padding: 16px;
+}
+
+.metadata-health-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.metadata-health-title-group h2 {
+  margin: 0 0 4px;
+}
+
+.metadata-health-subtitle,
+.metadata-health-scope,
+.metadata-health-metric-label {
+  color: var(--text-muted);
+}
+
+.metadata-health-subtitle {
+  font-size: var(--font-ui-small);
+}
+
+.metadata-health-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.metadata-health-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.metadata-health-metric {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  padding: 10px 12px;
+  background: var(--background-secondary);
+}
+
+.metadata-health-metric-value {
+  font-size: 1.35em;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.metadata-health-metric-label {
+  margin-top: 3px;
+  font-size: var(--font-ui-smaller);
+}
+
+.metadata-health-scope {
+  display: flex;
+  gap: 6px 16px;
+  flex-wrap: wrap;
+  padding: 0 2px 14px;
+  font-size: var(--font-ui-smaller);
+}
+
+.metadata-health-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.metadata-health-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.metadata-health-tabs button.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.metadata-health-search {
+  min-width: 180px;
+  max-width: 320px;
+  flex: 1 1 220px;
+}
+
+.metadata-health-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metadata-health-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  padding: 10px 12px;
+  background: var(--background-primary-alt);
+}
+
+.metadata-health-card.has-issues {
+  border-left: 3px solid var(--text-warning);
+}
+
+.metadata-health-card.is-healthy {
+  border-left: 3px solid var(--text-success);
+}
+
+.metadata-health-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.metadata-health-file-link {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-accent);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.metadata-health-file-link:hover {
+  text-decoration: underline;
+}
+
+.metadata-health-badge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+}
+
+.metadata-health-badge.is-healthy {
+  background: rgba(var(--color-green-rgb), 0.14);
+  color: var(--text-success);
+}
+
+.metadata-health-badge.has-issues {
+  background: rgba(var(--color-orange-rgb), 0.14);
+  color: var(--text-warning);
+}
+
+.metadata-health-issue-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 8px;
+  align-items: start;
+  margin-top: 9px;
+}
+
+.metadata-health-issue-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 24px;
+}
+
+.metadata-health-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.metadata-health-chip {
+  padding: 2px 7px;
+  border-radius: var(--radius-s);
+  background: var(--background-modifier-hover);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+}
+
+.metadata-health-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.metadata-health-statusbar {
+  cursor: pointer;
+}
+
+.metadata-health-settings-textarea {
+  width: min(520px, 100%);
+  font-family: var(--font-monospace);
+}
+
+@media (max-width: 720px) {
+  .metadata-health-header,
+  .metadata-health-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .metadata-health-actions {
+    justify-content: flex-start;
+  }
+
+  .metadata-health-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metadata-health-search {
+    max-width: none;
+    width: 100%;
+  }
+}

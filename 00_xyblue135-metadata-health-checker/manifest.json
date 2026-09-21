@@ -1,0 +1,9 @@
+{
+  "id": "00_xyblue135-metadata-health-checker",
+  "name": "00_xyblue135-metadata-health-checker 健康元数据检查",
+  "version": "1.0.0",
+  "minAppVersion": "1.7.2",
+  "description": "Check whether required frontmatter fields exist and contain data in whitelisted folders.",
+  "author": "OpenAI",
+  "isDesktopOnly": false
+}
