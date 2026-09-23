@@ -32,15 +32,15 @@
     "tagsHarness": "最多输出 {{maxTags}} 个互不重复的标签 value；优先质量，不要为了凑数量加入泛化、重复或低信息量标签；不得使用 skill/Linux、domain/云计算 这类层级前缀。\nweight 主要表示‘技术专有性 + 对检索这篇笔记的区分度’，不是泛泛的主题相关度。\n具体技术实体优先高权重：软件/工具、框架、库、协议、API、算法、数据结构、数据库、系统组件、具体文件或媒体格式等，应优先于宽泛动作或用途词。\n当具体技术词和泛化概念表达相近时，具体技术词必须明显更高。例如 FFmpeg≈0.98，视频转码≈0.72，格式转换≈0.45；不要让‘格式转换’这类泛词压过 FFmpeg。\n建议权重层级：核心具体技术 0.90~1.00；具体机制/算法/协议/格式 0.80~0.94；明确任务或领域 0.60~0.79；泛化动作/用途 0.30~0.59。\n避免同义词、近义重复、上下位概念重复占位；在最多 {{maxTags}} 个标签内尽量覆盖不同的高信息量技术维度。",
     "technicalDepthHarness": "你是一名技术内容评审员。请完整阅读下面提供的技术文章全文，对文章本身的技术深度AI_technical_depth进行评分。\n\n衡量的是技术机制深度、工程实现复杂度、系统复杂度、分析验证强度以及所需前置知识密度。\n它不是：\n- 文章写得好不好\n- 文章字数多少\n- 教程是否详细\n- 对某个特定读者来说难不难\n- 文章是否有很多代码、命令或截图\n- 文章是否有很多专业术语\n因此：\n一篇非常详细的软件安装教程、命令大全、工具使用说明，即使有上万字，也可能只有 10～35 分。\n一篇只有两三千字，但真正分析了协议、内核、编译器、数据库内部机制、分布式一致性、性能瓶颈或复杂故障根因的文章，可以达到 60～85 分。\n\ntechnical_depth 为 0～100 的整数。\n不要根据当前文章集合进行归一化。\n不要把 “当前最难文章” 强行设置为 100。\n100 分代表固定的专家级 / 研究级技术深度，因此绝大多数普通技术博客都不应该达到 90 分以上。\n\n## 五个评分维度\n### 1. 机制深度：0～28 分\n判断文章是否真正解释 “为什么” 和 “内部如何工作”。\n重点包括：\n- 底层原理\n- 内部机制\n- 数据结构\n- 算法\n- 协议\n- 内核行为\n- 调度机制\n- 编译过程\n- 存储机制\n- 网络机制\n- 分布式机制\n- 数据流或控制流\n- 源码级行为\n仅告诉读者 “执行什么命令”“在哪里点击”“修改什么配置”，不能获得高机制分。\n### 2. 工程实现：0～24 分\n判断文章是否包含真实、有复杂度的技术实现。\n重点包括：\n- 多组件协作\n- 完整部署\n- 架构搭建\n- 编译\n- 二次开发\n- 复杂配置\n- 自动化\n- 系统集成\n- 源码修改\n- 性能调优\n- 工程取舍\n注意大量复制粘贴命令并不等于工程复杂度高。\n单纯安装软件、配置环境变量、启动服务、修改少量配置文件，应限制在较低分数。\n### 3. 分析与验证：0～19 分\n判断文章是否形成真正的技术分析闭环。\n例如：\n现象\n→ 收集证据\n→ 提出假设\n→ 日志 / 抓包 / 性能指标 / 源码分析\n→ 排除错误方向\n→ 定位根因\n→ 修改方案\n→ 再次验证\n以下内容可以提高本项评分：\n- benchmark\n- 性能测试\n- A/B 对比\n- Wireshark\n- tcpdump\n- perf\n- strace\n- 日志分析\n- 实验\n- 指标变化\n- 故障复现\n- 多方案比较\n如果文章只是给出最终解决办法，没有分析过程，本项不要给高分。\n### 4. 系统复杂度：0～17 分\n判断问题涉及多少技术层次以及它们之间是否存在真实关联。\n例如：\n应用\n→ 中间件\n→ 操作系统\n→ 网络协议\n→ 驱动\n→ 硬件\n或者：客户端\n→ 网关\n→ 服务发现\n→ Raft\n→ 存储\n→ 网络\n跨组件、跨系统、跨层分析通常比单一工具的使用具有更高技术深度。\n但不要因为文章提到了很多产品名称就自动加分，必须存在实际技术关系。\n### 5. 前置知识密度：0～12 分\n判断读者真正理解文章需要多少技术基础。\n例如需要理解：\n- 操作系统\n- 网络\n- 数据库\n- 数据结构\n- 编译原理\n- 分布式系统\n- GPU/CUDA\n- 存储\n- Linux 内核\n- 数学或机器学习理论\n单纯因为术语很多，不代表前置知识密度高。\n## 分数区间标准\n### 0～19：基础信息 / 简单操作\n典型内容：\n- 单个命令说明\n- 软件是什么\n- 简单参数说明\n- 基础知识点\n- 简单问题记录\n- UI 操作\n- 软件安装步骤\n### 20～39：基础技术教程\n典型内容：\n- 常规 Linux 教程\n- Docker 基础操作\n- 普通软件部署\n- 基本配置\n- 常见故障解决\n- API 基础使用\n- 比较完整但机制较浅的教程\n文章可以写得非常完整，但核心仍然是 “怎么使用”。\n### 40～59：中等技术深度\n典型内容：\n- 开始解释内部机制\n- 多组件配置\n- 较复杂部署\n- 有一定故障分析\n- 比较深入的数据库、Linux、网络、Docker/Kubernetes 教程\n- 带有部分原理和验证的工程实践\n### 60～74：高级技术\n典型内容：\n- 系统级故障排查\n- 完整性能分析\n- 跨组件问题\n- 编译与复杂构建\n- 分布式系统机制\n- 网络底层问题\n- 存储内部机制\n- 有明显 “证据 → 根因 → 修复 → 验证” 的分析闭环\n### 75～89：深度技术\n典型内容：\n- 跨多个技术层\n- 深入底层机制\n- 源码级或协议级分析\n- 高复杂度工程实现\n- 性能实验充分\n- 多种工具联合定位\n- 有较强技术取舍分析\n- 接近高级工程师 / 专家经验总结\n### 90～99：专家 / 研究级\n只有在文章同时具备多数以下特征时使用：\n- 很强的机制深度\n- 源码或算法层分析\n- 高复杂度系统问题\n- 严格实验或性能验证\n- 多方案比较\n- 明确技术权衡\n- 较强原创分析\n- 对已有方法有改进或新的工程发现\n不要因为文章 “看起来很厉害” 就给 90+。\n### 100\n极少使用。\n代表非常完整的专家级或研究级技术成果，通常已经接近：\n- 高质量研究论文\n- 极深入的原创系统研究\n- 完整架构设计 + 底层实现 + 实验验证\n- 对复杂技术问题具有明显原创贡献\n普通博客不需要存在 100 分文章。\n## 特别需要防止的误判\n### 长文章不等于高分\n50000 字的命令参考手册，可能只有 25～40 分。\n### 代码多不等于高分\n大量 Shell、YAML、Docker Compose 或配置文件只是实现步骤时，不应该自动获得高分。\n### 安装复杂不等于技术深\n“安装了很多依赖、踩了很多环境问题” 不代表文章达到高级技术深度。\n### 专业术语多不等于高分\n必须确认文章真正解释或使用了这些机制。\n### 知识类文章写得很好也不等于技术深\n如果主要是概念介绍、历史介绍、软件介绍、基础科普，应保持较低到中等评分。\n### 短文章也可能高分\n如果短文章准确解释了一个非常深入的核心机制，可以获得较高分数。\n## 评分要求\n阅读全文后再评分，不要只根据标题、摘要或开头判断。\n先在内部完成五个维度的判断，然后得到最终 technical_depth。\n最终分数必须是整数。\n相邻文章之间不必人为拉开差距；如果技术深度相近，可以得到相同分数。\n不要为了让分布看起来漂亮而修改分数。\n## 输出格式\n只输出得分 预留的位置就是得分的位置",
     "takeHarnessEnabled": true,
-    "takeHarness": "看完文章后，以内行视角写一段简短犀利的技术博文点评，主打尖锐直白的批评，适度嘲讽 先点出文章表面价值，随后重点严厉批评文章存在的短板：比如只会罗列操作、浮于现象、缺少底层原理、把简单踩坑包装成干货、论证薄弱等。但如果没这些问题可以表扬的\n硬性约束：仅输出单个段落，禁止分点、小标题、列表、Markdown，不要长篇大论，控制在50～150字。可以适当补充文章之外的知识。并且在输出的前面标注 【锐评】\n来让人看到不是刻意嘲讽的 只是点出不足",
+    "takeHarness": "请阅读下面的技术笔记，以资深工程师和技术审稿人的视角进行锐评。\n\n要求：\n1. 先判断文章实际价值，不要默认批评；如果内容扎实，可以直接认可。\n2. 如果存在问题，重点指出技术层面的不足，例如：\n   - 是否停留在操作步骤，没有解释底层机制\n   - 是否混淆概念，没有区分协议、实现方式和现象\n   - 是否缺少关键原理导致经验无法迁移\n   - 是否把个人踩坑总结包装成通用结论\n   - 是否存在技术表述不严谨或过度简化\n3. 不要批评文章没有涉及它本来不负责的内容，例如操作教程不要求写论文级原理。\n4. 评论需要像真实技术社区中的高质量点评，而不是营销式吹捧或无脑吐槽。\n5. 语气可以犀利直接，但必须有事实依据。\n6.适度批评 不要把笔记说得过于完美\n7.不要有太多口水话 \n\n输出格式：\n开头固定：\n【锐评】\n\n仅输出一个自然段，50～150字。",
     "qaHarnessEnabled": true,
     "qaMaxQuestions": 5,
     "qaMaxQuestionsEnabled": false,
-    "qaHarness": "\n你是一名资深技术招聘面试官，同时也是技术知识库整理专家。 你的任务是： 根据输入的 Markdown 技术文档内容，生成一个新的字段： _qa 该字段用于模拟真实招聘面试场景，帮助评估候选人是否真正掌握该技术。 注意： 不要修改原文内容。 不要删除已有字段。 不要生成文章总结。 只新增 _qa 内容。\n一、核心目标  将普通技术知识转换为： 「招聘面试官会问的问题」 + 「优秀候选人的经验型回答」 而不是： - 文章摘要 - FAQ - 章节总结 - 概念解释 错误示例： Q: 这篇文章介绍了什么？ 错误： A: 本文主要介绍 Docker 网络配置。 正确方向： Q: 你在生产环境中使用 Docker 网络时，为什么选择 macvlan 而不是 bridge？你如何判断？ A: 我之前在项目中遇到过类似场景。当容器需要像真实设备一样出现在局域网中时，我会考虑 macvlan，因为它可以给容器独立 MAC 地址。  \n二、生成数量规则  根据技术文档复杂度动态决定问题数量。 1. 简单文档： 特点： - 单个命令 - 单个配置 - 单个问题解决方案 生成： 1-3 个问题 重点： - 基础理解 - 使用方式 - 简单排查2. 中等文档： 特点： - 完整部署流程 - 多个组件组合 - 有安装、配置、验证 生成： 3-6 个问题 覆盖： - 原理理解 - 实际使用 - 常见错误 - 排查方法3. 复杂文档： 特点： - 系统性技术方案 - 多组件依赖 - 架构设计 - 大量踩坑记录 生成： 6-10 个问题 覆盖： - 环境设计 - 底层原理 - 故障定位 - 性能优化 - 架构设计  \n三、、问题设计要求  问题必须像真实面试官提问。 优先生成以下方向： \n【环境搭建】 示例： 如果让你从零搭建一个支持 CUDA 的 FFmpeg 编译环境，你会如何规划依赖和版本？\n【原理理解】 示例： Docker bridge 网络和 macvlan 网络的核心区别是什么？\n【故障排查】 示例： 如果 Docker 容器启动正常，但是外部无法访问，你会按照什么顺序排查？\n【工程实践】 示例： 你在生产环境中如何管理 Docker Compose 配置？\n【架构设计】 示例： 如果多个业务需要共享 Docker 网络，你会如何设计网络方案？\n【性能优化】 示例： 如何判断 Docker 网络性能问题来自应用、容器网络还是宿主机？  \n四、回答生成要求  回答必须模拟优秀候选人的面试回答。 不要直接复制文档  像机器人一样解释，应该使用第一人称经验表达： 例如： \"我之前项目中遇到过类似问题...\" \"我的排查习惯通常是...\" \"遇到这种情况，我会先确认...\" 回答需要包含： 1. 技术判断依据 2. 排查思路 3. 实际操作方法 4. 关键注意事项 如果原文存在： - 命令 - 配置 - 错误日志 - 参数 可以保留。  \n五、技术范围限制  严格基于输入文档生成。 不要： - 添加文档没有涉及的新技术 - 引入未经验证的方案 - 扩展成通用教程 如果文档没有说明： 不要自行补充。  \n六、输出格式  生成 YAML 格式\n示例格式 注意空格来确认qa\n```\nQ: 为什么在2K屏幕上运行1080p分辨率时图像会模糊？你之前遇到过类似问题吗？\nA: 我之前在项目中遇到过类似场景。当显示器的原生分辨率是2K（比如2560x1440），但运行1080p（1920x1080）时，由于分辨率不匹配，操作系统或显卡需要进行缩放处理。这个过程往往会导致像素插值，使得图像细节丢失，看起来模糊。我的判断依据是，这种模糊通常源于缩放算法不够优化，尤其是在非整数倍缩放时。排查时，我会先确认显示器和显卡的驱动设置，确保没有强制使用低质量缩放。实际操作中，我会检查NVIDIA控制面板的分辨率选项，看是否启用了高级缩放。\n\nQ: 你如何通过NVIDIA控制面板的管理3D设置来优化这种模糊？请描述具体步骤。\nA: 在我的经验中，解决这类问题通常依赖显卡驱动的图形增强功能。我会先打开NVIDIA控制面板，进入“管理3D设置”全局选项卡，找到“图形增强”部分。然后，我会开启“图形增强”选项，这会解锁额外的锐化设置。具体操作是：点击“应用”后，调整锐化滑块，通常我会从中间值开始，根据显示效果微调。关键注意事项是，锐化过高可能导致图像噪点，所以我会边调整边观察测试图案，确保清晰度提升而不失真。这个过程需要耐心，因为不同游戏或应用可能需要不同的配置。\n\nQ: 开启图形增强后，为什么会损失显卡性能？你如何在实际使用中平衡图像质量和性能？\nA: 图形增强功能需要额外的GPU资源进行实时锐化处理，这会增加显卡的负载，导致帧率下降或功耗上升。我的排查思路是，先通过性能监控工具（如MSI Afterburner）观察开启前后的帧率变化。如果性能损失明显，我会尝试降低锐化强度或仅在特定应用中启用，而不是全局开启。实际操作中，我会根据使用场景调整：比如在静态办公时保持开启，在游戏时关闭以优先保证流畅度。关键是要测试不同设置，找到个人接受的平衡点，避免过度牺牲性能。\n```\n",
+    "qaHarness": "你是一名资深技术面试官和技术知识库设计专家。\n\n任务：\n根据输入的 Markdown 技术文档生成 `_qa` 字段。\n\n目标：\n把技术笔记转换成真实招聘面试场景中的考察题。\n\n重点考察：\n候选人是否理解技术背后的原因、决策过程、排错方法，而不是是否记住文章内容。\n\n严格禁止：\n- 不要总结文章\n- 不要把文章改写成问答\n- 不要逐句解释正文\n- 不要生成 FAQ\n- 不要问“这篇文章讲了什么”\n- 不要简单解释命令含义\n\n生成原则：\n\n问题必须模拟真实面试官追问。\n\n优先围绕：\n\n1. 技术决策\n例如：\n为什么选择这种方案？\n还有其他方案吗？\n什么时候不应该使用这个方案？\n\n2. 原理理解\n例如：\n这个机制底层为什么这样工作？\n如果换一个环境会发生什么？\n\n3. 故障排查\n例如：\n如果出现XXX异常，你会如何定位？\n\n4. 工程实践\n例如：\n实际部署时你会考虑哪些风险？\n\n5. 迁移能力\n例如：\n如果换成另一种架构/设备/环境，你的方法是否仍然适用？\n\n\n回答要求：\n\n回答模拟优秀工程师面试表达。\n\n不要复制正文。\n\n回答结构：\n\n1. 我的判断依据：\n说明为什么这么判断。\n\n2. 我的排查或实现思路：\n说明实际操作流程。\n\n3. 关键风险：\n说明容易踩坑的位置。\n\n\n可以使用正文中的：\n- 命令\n- 配置\n- 参数\n- 错误现象\n\n但是必须服务于回答，不允许机械重复。\n\n\n真实性要求：\n\n不要虚构：\n- 不存在的项目经历\n- 文档没有出现的新技术\n- 未验证的解决方案\n\n允许使用：\n“实际工作中遇到类似问题时，我通常会……”\n\n不要使用：\n“我在某某公司项目中……”\n\n数量：\n根据复杂度生成：\n简单：2-3题\n中等：4-6题\n复杂：6-10题\n\n\n输出：\n\n只输出 YAML。\n\n格式：\n\n_qa:\n  - Q: \"\"\n    A: \"\"\n\n禁止输出：\nMarkdown\n代码块\n解释文字\n思考过程\n<|channel|>\nthought\nanalysis\n等内部标签。",
     "aiTitleHarnessEnabled": true,
     "aiTitleMaxItems": 5,
-    "aiTitleMaxItemsEnabled": true,
-    "aiTitleHarness": "语言：中文。\n用途：基于笔记正文生成 {{maxItems}} 个标题，适配博客发布 + 短视频封面标题，兼顾检索可用性。\n形式：只输出纯文本标题列表，每行一个标题，不要序号、Markdown 列表符号、代码块、标题或额外解释。\n要求：\n1. 严格依据原文内容，所有提到的现象、结论、数字都必须在正文存在，严禁编造不存在信息，保留核心主题词，保证 RAG 检索。\n2. 多使用短视频爆款钩子手法：制造反差、戳中痛点、抛出灵魂疑问、“没想到”“千万别”“我后悔” 这类轻情绪词、第一人称体验、数字清单。\n3. 风格错落搭配：一部分稳重适合博客，一部分有悬念、有情绪，适合短视频引流；标题之间角度错开，不要同质化换词。\n4. 把握边界：只做悬念，不虚假夸大，不能正文没有却写 “99% 的人都错了” 这类无依据表述。\n5. 句式长短结合，不要全部都是长句，也不要全部都是短句。",
+    "aiTitleMaxItemsEnabled": false,
+    "aiTitleHarness": "根据文章内容生成ai创造的文章标题出来\n下面是格式参考\n《名字》\n《名字》\n《名字》\n",
     "summaryNaturalOverviewMigratedV057": true
   },
   "state": {
@@ -49,15 +49,373 @@
         "lastError": "AI 生成期间笔记正文发生变化，本次结果未写入；下次会重新生成",
         "lastErrorType": "ERROR"
       },
-      "00_docs/01运维_0网络/00_网络知识/5G核心网基础.md": {
-        "lastError": "Technical Depth 的 mechanism_depth 必须是 0～28 的整数",
-        "lastErrorType": "STRUCTURED_OUTPUT",
-        "lastRawModelOutput": "【尝试 1】\n{\n  \"technical_depth\": 0\n}\n\n【尝试 2】\n{\"technical_depth\":85}"
-      },
       "00_docs/01运维_0网络/网卡知识/关于网卡名字前缀名的介绍.md": {
-        "lastError": "Technical Depth 的 technical_depth 必须是 0～100 的整数",
-        "lastErrorType": "STRUCTURED_OUTPUT",
-        "lastRawModelOutput": "【尝试 1】\n{ \"AI_technical_depth\": 0 }\n\n【尝试 2】\n{\"AI_technical_depth\": 50}"
+        "lastError": "API 502: {\"error\":{\"message\":\"All 3 routed attempt(s) failed with upstream provider errors (rate_limited ×1, upstream_error ×1, error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retr",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/走出内网环境-科学上网/同时设置http_proxy和HTTP_PROXY环境变量.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 3 routed attempt(s) failed with upstream provider errors (error ×2, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/走出内网环境-科学上网/linux配置clash代理客户端以及服务器.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 12 routed attempt(s) failed with upstream provider errors (error ×12) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attem",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络连接如ssh类/允许Root远程登录.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 5 routed attempt(s) failed with upstream provider errors (error ×4, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络流量分析/wireshark更为详细的过滤命令.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络流量分析/iperf和ntttcp网络吞吐量和丢包测试及网页测速搭建.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 7 routed attempt(s) failed with upstream provider errors (error ×5, upstream_error ×1, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络流量分析/同主机双网卡流量交互被内核优化不被监控.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 12 routed attempt(s) failed with upstream provider errors (error ×9, rate_limited ×2, empty_completion ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; r",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络安全/web简单鉴权_url-token.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 8 routed attempt(s) failed with upstream provider errors (error ×8) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络故障排除/软路由故障排除记录.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 7 routed attempt(s) failed with upstream provider errors (error ×7) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络故障排除/网络排错之断流.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络故障排除/Linux检查网路接口质量&处理网络震荡.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络机柜服务器/网络模拟器配置web访问.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 4 routed attempt(s) failed with upstream provider errors (error ×3, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络机柜服务器/网络模拟器实现远程连接.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 8 routed attempt(s) failed with upstream provider errors (error ×5, rate_limited ×2, forbidden ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络机柜服务器/服务器必须有的带外口ipmi等.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 20 routed attempt(s) failed with upstream provider errors (error ×18, context_too_large ×1, model_not_found ×1). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt trail: cloudflare/@cf/google/gemma-2b-it-lora key1: context_too_large; google/gemini-2.5-flash-lite key2: model_not_found; nvidia/nvidia/nemotron-3-super-120b-a12b key3: error; cloudflare/@cf/qwen/qwen2.5-coder-32b-instruct key1: error; google/gemini-3.1-",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络机柜服务器/关于字体会影响脚本观看效率.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络机柜服务器/二层交换机通过vlan配置管理口IP.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 20 routed attempt(s) failed with upstream provider errors (error ×20). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt trail: google/gemini-3.1-flash-lite key1: error; openrouter/google/gemma-4-31b-it:free key2: error; openrouter/poolside/laguna-s-2.1:free key2: error; google/gemini-3.7-flash key1: error; cloudflare/@cf/meta/llama-3.2-1b-instruct key3: error; google/gemini-3-flash-preview key1: error; cloudflare/",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络参数/HTTP_中_GET_与_POST_的区别.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 20 routed attempt(s) failed with upstream provider errors (error ×20). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt trail: cloudflare/@cf/ibm-granite/granite-4.0-h-micro key1: error; cloudflare/@cf/meta/llama-3.1-8b-instruct-fp8 key1: error; cloudflare/@cf/google/gemma-2b-it-lora key1: error; openrouter/nvidia/nemotron-3.5-content-safety:free key2: error; nvidia/google/diffusiongemma-26b-a4b-it key3: error; nv",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络参数/curl请求的参数们.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 8 routed attempt(s) failed with upstream provider errors (error ×5, rate_limited ×2, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or c",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/家庭影院/家庭影院第7章【挂载小雅alist】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 5 routed attempt(s) failed with upstream provider errors (error ×5) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/家庭影院/家庭影院第8章【关闭rlone缓存而使用jellyfin缓存】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/家庭影院/家庭影院第9章【添加直播源】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 5 routed attempt(s) failed with upstream provider errors (error ×5) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/家庭影院/家庭影院第5章【linux配置硬件加速转码】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 19 routed attempt(s) failed with upstream provider errors (error ×16, upstream_error ×1, rate_limited ×1, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/家庭影院/家庭影院第4章【可能遇到的问题】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 6 routed attempt(s) failed with upstream provider errors (error ×6) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/家庭影院/家庭影院第3章【挂载云盘webdav】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/家庭影院/家庭影院第1章【初识nas影音库】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 8 routed attempt(s) failed with upstream provider errors (error ×6, upstream_error ×1, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/家庭影院/家庭影院第12章【杜比降级为双声道】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (rate_limited ×1, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provi",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/家庭影院/家庭影院第10章【给自己视频添加预览图】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/用everything10秒开启ftp服务端.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/如何获取监控摄像头的RTSP流.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 6 routed attempt(s) failed with upstream provider errors (error ×6) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/在win上挂载wabdav导致资源管理器崩溃.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 20 routed attempt(s) failed with upstream provider errors (error ×20). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt trail: cloudflare/@cf/openai/gpt-oss-20b key1: error; cloudflare/@cf/deepseek-ai/deepseek-r1-distill-qwen-32b key1: error; google/gemini-3.1-flash-lite key2: error; nvidia/nvidia/nemotron-3-ultra-550b-a55b key3: error; nvidia/google/diffusiongemma-26b-a4b-it key3: error; google/gemma-4-26b-a4b-it",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/关于视频不能作用于FTP.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 11 routed attempt(s) failed with upstream provider errors (error ×10, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider s",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/关于rclone的缓存模式如何选择.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 14 routed attempt(s) failed with upstream provider errors (error ×14) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attem",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/smb_ftp_WebDav_nfs_网络磁盘共享.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 20 routed attempt(s) failed with upstream provider errors (error ×19, rate_limited ×1). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt trail: google/gemini-robotics-er-2-preview key1: error; cloudflare/@cf/openai/gpt-oss-20b key2: error; zhipu/glm-4.7-flash key3: rate_limited; openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free key4: error; openrouter/dots-studio/dots-3-note-preview:free key4: error; o",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/rclone的全部配置.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/nfs导致sftp异常.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 11 routed attempt(s) failed with upstream provider errors (error ×11) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attem",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/Linux上配置Ftp_Server.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 18 routed attempt(s) failed with upstream provider errors (error ×17, rate_limited ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provi",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网络共享类/IIS的mime类型.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 6 routed attempt(s) failed with upstream provider errors (error ×5, rate_limited ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provide",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/【常用网络工具】不装怎么看网卡参数【sys-class-net-网卡名-参数】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 4 routed attempt(s) failed with upstream provider errors (error ×4) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/【常用网络工具】【ethtool】【ip l】【ip n】【ip a】【ip r】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 8 routed attempt(s) failed with upstream provider errors (error ×7, rate_limited ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provide",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/【ip l】ip link的UP和LOWER_UP和state-UP的区别.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/【ip l】ip link set【开关网卡】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 9 routed attempt(s) failed with upstream provider errors (error ×9) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/【ip l】ip -s link.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 8 routed attempt(s) failed with upstream provider errors (error ×7, rate_limited ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provide",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/【ip l】ip -s link的qlen队列长度决定的skb缓冲区的skb是什么.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 7 routed attempt(s) failed with upstream provider errors (error ×6, rate_limited ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provide",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/【ip l】ip -d link的混杂模式promiscuity和全多播模式allmulti的说明.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/【ip l】ip -d link的mtu参数.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 10 routed attempt(s) failed with upstream provider errors (error ×9, upstream_error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check prov",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/【ip a】ip addre和ip address【添加删除ip】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 3 routed attempt(s) failed with upstream provider errors (error ×3) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/【ip a】ip -br a.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/【ethtool】ethtool 网卡名称.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 4 routed attempt(s) failed with upstream provider errors (error ×4) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/【ethtool】ethtool -i 网卡名【查看网卡驱动信息】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/linux网卡改名字.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, upstream_error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check pro",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/linux网卡改altname别名.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (upstream_error ×1, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check pro",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/Linux下更改有线网卡ip之选择网络管理器.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡配置/Linux下使用命令连接wifi的三种方式.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 10 routed attempt(s) failed with upstream provider errors (error ×10) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attem",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡知识/远程网络唤醒.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 9 routed attempt(s) failed with upstream provider errors (error ×8, context_too_large ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check pr",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡知识/虚拟网卡的原理和用途.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 6 routed attempt(s) failed with upstream provider errors (error ×6) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡知识/排查网卡掉速是否由于对端引起.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡知识/如何科学在厚重墙体后获得更好的wifi信号.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×1, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡知识/关于win和linux网络静态路由的持久化.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡知识/win的路由表问题导致的默认网关问题.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 3 routed attempt(s) failed with upstream provider errors (error ×3) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/网卡知识/win上如何查看网卡的芯片.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/端口/Netstat和SS.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/端口/PowerShell看端口开放情况.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 3 routed attempt(s) failed with upstream provider errors (error ×3) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/端口/nmap的嗅探使用.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/域名类/【内网穿透】cpolar穿透.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, rate_limited ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provi",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/域名类/签名证书_vs_CA_签发证书.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 6 routed attempt(s) failed with upstream provider errors (error ×6) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/域名类/【证书】SSL证书自动续期_Let’s_Encrypt.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/域名类/【cf03】ddns-go解析v6_第01章_云厂商推送V6.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, rate_limited ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provi",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0网络/00_网络知识/DNS加密的DOH和DOT.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×1, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/Y_常用小知识_软件/字符集&&编码字符集ASCll和GBK和Unicode_UTF-8_UTF-32.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attem",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/Y_常用小知识_软件/关于win的winutil工具.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, upstream_error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check pro",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/Y_常用小知识_软件/win的快捷方式图标丢失.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (daily_quota_exhausted ×1, error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or chec",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/Y_常用小知识_软件/win快速创建文件夹.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×1, daily_quota_exhausted ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or chec",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/Y_常用小知识_软件/Windows不是所有版本默认开启长路径.md": {
+        "lastError": "API 429: {\"error\":{\"message\":\"All models rate-limited after 2 attempts (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). Soonest cooldown reset ~47s. Attempt trail: cloudflare/@cf/meta/llama-3.3-70b-instruct-fp8-fast key1: daily_quota_exhausted; google/gemin",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/03数据库/数据库_知识_mysql/04_故障处理/mysql报错_Public_Key_Retrieval_is_not_allowed.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 5 routed attempt(s) failed with upstream provider errors (error ×5). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt trail: google/gemini-3.5-flash-lite key1: error; openrouter/dots-studio/dots-3-note-preview:free key2: error; cloudflare/@cf/openai/gpt-oss-20b key3: error; zhipu/glm-4.5-flash key4: error; nvidia/google/diffusiongemma-26b-a4b-it key5: error. Last error: connect ECONNREFUSED 127.0.0.1:10090\",\"type\"",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/03数据库/数据库_知识/树结构/01_常用树结构简单预览【快速回忆】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, daily_quota_exhausted ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or ch",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/03数据库/数据库_知识/树结构/00_要我说这些树就是为了避免大规模的指数运算.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (rate_limited ×1, error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provide",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/03数据库/数据库_知识/索引相关/MySQL-InnoDB的架构的隐藏row_id索引【业务禁止】.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (daily_quota_exhausted ×1, error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or chec",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/03数据库/数据库_知识/事务的原子性-典型-付款.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×1, rate_limited ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provide",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0linux/运维_管理工具-web/cockpit轻量网页_Linux_可视化管理面板.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, upstream_error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check pro",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0linux/运维_虚拟机/03_WSL/关于WSL虚拟机的使用和扩展.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (upstream_error ×1, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check pro",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0linux/运维_虚拟机/02_VirtualBox/VirtualBox5.2+eNSP_遇_Docker：Hyper-V_冲突的坑与解决.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, upstream_error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check pro",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0linux/运维_服务发现/配置中心和注册中心.md": {
+        "lastError": "API 请求超时（180 秒）",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0linux/运维_服务发现/nacos大类【服务通讯录】/为nacos增加数据库管理.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0linux/运维_服务发现/nacos大类【服务通讯录】/第01章-认识nacos.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0linux/运维_服务发现/counsul大类/部署注册中心Consul.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, upstream_error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check pro",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0linux/运维_服务发现/counsul大类/【监控】Prometheus的基于文档的自动发现.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×1, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0linux/运维_服务发现/zookeeper大类/zookeeper最主要优势分布式锁.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, daily_quota_exhausted ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or ch",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0linux/运维_prometheus/07_排错/【监控排错】关于Node-Exporter的docker容器未采集网卡数据.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, upstream_error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check pro",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0linux/运维_prometheus/05_Grafana可视化/【监控】Prometheus连接Grafana自建数据源仪表盘.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×1, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0linux/运维_prometheus/05_Grafana可视化/grafana的数据显示原理.md": {
+        "lastError": "API 请求超时（180 秒）",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0linux/命令与脚本/02_文本处理与管道/利用sort对ip进行排序.md": {
+        "lastError": "AI 返回了空 AI_title",
+        "lastErrorType": "ERROR"
+      },
+      "00_docs/01运维_0linux/00_内核/Linux内核自用常用参数.md": {
+        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
+        "lastErrorType": "ERROR"
       }
     }
   }

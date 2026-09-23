@@ -501,6 +501,30 @@ const DEFAULT_TAKE_HARNESS = `作为该文章所在领域的资深工程师，�
 - 指出局限性：文章只停留在概念 / 使用层面，没有深入底层协议、内部机制；
 - 语气平实，不带嘲讽，不吹不黑，内行视角，不要长篇大论。`;
 
+// 内容指纹忽略的 frontmatter 键。
+// 1) 插件自身管理的 AI_* 字段与旧版 summary/tags 字段：插件自己写入不应触发「正文已变动」。
+// 2) token_count：由 00_xyblue135-char-count-updater 在正文变化后延迟（debounce 5 秒）写入的派生字段。
+//    它若参与指纹，会出现「编辑后 5 秒内触发 AI → 基线里 token_count 还是旧值 → 5 秒后它被更新」
+//    的误报：正文其实没变，却被判定为变动。它由正文推导而来，忽略它不会漏掉任何真实的正文改动。
+const FINGERPRINT_IGNORED_KEYS = [
+  "summary",
+  "summary_short",
+  "summary_long",
+  "tags",
+  "technical_depth",
+  "take",
+  "qa",
+  "AI_summary_short",
+  "AI_summary_long",
+  "AI_tags",
+  "AI_technical_depth",
+  "AI_take",
+  "AI_qa",
+  "AI_title",
+  "position",
+  "token_count",
+];
+
 const DEFAULT_SETTINGS = {
   baseUrl: "http://192.168.3.101:3001/v1",
   apiKey: "",
@@ -588,6 +612,18 @@ class FileLeftScopeError extends Error {
     this.code = "FILE_LEFT_SCOPE";
     this.path = path;
     this.folder = folder;
+  }
+}
+
+// 正文在生成期间发生变动。分为两种时机：
+// - 发请求之前发现（本次 API 调用没有发出去，不消耗额度）；
+// - 请求返回之后发现（结果已生成但不再写入）。
+class SourceChangedError extends Error {
+  constructor(message = "笔记正文已变动，本次 API 请求未发出", fingerprint = "") {
+    super(message);
+    this.name = "SourceChangedError";
+    this.code = "SOURCE_CHANGED";
+    this.fingerprint = fingerprint;
   }
 }
 
@@ -1013,6 +1049,9 @@ module.exports = class AiMetadataPlugin extends Plugin {
       this.ensureTaskActive(context.abortSignal);
       await this.waitForApiGap(context);
       this.ensureTaskActive(context.abortSignal);
+      // 间隔等待结束后、请求真正发出之前再校验一次正文指纹。
+      // 校验失败会直接抛出：既不发送请求，也不推进 lastApiCompletedAt。
+      await this.assertSourceUnchangedBeforeRequest(context);
       this.setRuntimeStatus("requesting", context);
       try {
         return await task();
@@ -1226,6 +1265,15 @@ module.exports = class AiMetadataPlugin extends Plugin {
         this.scheduleStateSave();
         setStateForButtons("idle");
         new Notice("xyblue135 私人·AI 元数据：跳过，无可分析正文");
+      } else if (error && error.code === "SOURCE_CHANGED") {
+        // 请求尚未发出，不算失败，也不写错误记录。
+        record.lastError = "";
+        record.lastErrorType = "";
+        record.lastRawModelOutput = "";
+        this.state.files[file.path] = record;
+        this.scheduleStateSave();
+        setStateForButtons("idle");
+        new Notice("xyblue135 私人·AI 元数据：正文已变动，本次 API 请求未发出（未消耗调用），请重新触发", 7000);
       } else {
         record.lastError = message.slice(0, 1000);
         record.lastErrorType = error && error.code ? String(error.code) : "ERROR";
@@ -1277,7 +1325,10 @@ module.exports = class AiMetadataPlugin extends Plugin {
 
     const prepared = await this.prepareFile(file);
     const currentTags = this.settings.feedMetadataToAiEnabled === true ? this.readCurrentTags(file) : [];
-    const context = { filePath: file.path, reason, progress, abortSignal };
+    // expectedFingerprint 会随 context 一路带进 API 队列：队列等待期间（默认 30 秒请求间隔，
+    // 或前一篇笔记仍占用队列时）正文如果已经变动，就在真正发出请求之前终止，
+    // 而不是等请求返回后才丢弃结果。
+    const context = { filePath: file.path, reason, progress, abortSignal, expectedFingerprint: prepared.fingerprint };
     let result = {};
 
     const bundleKinds = requested.filter((kind) => kind !== "take" && kind !== "qa" && kind !== "ai_title");
@@ -1352,11 +1403,34 @@ module.exports = class AiMetadataPlugin extends Plugin {
     return result;
   }
 
+  async readCurrentFingerprint(file) {
+    const raw = await this.app.vault.cachedRead(file);
+    return this.computeSourceFingerprint(raw, file);
+  }
+
   async assertSourceUnchanged(file, expectedFingerprint) {
-    const currentRaw = await this.app.vault.cachedRead(file);
-    const currentFingerprint = this.computeSourceFingerprint(currentRaw, file);
+    const currentFingerprint = await this.readCurrentFingerprint(file);
     if (currentFingerprint !== expectedFingerprint) {
-      throw new Error("AI 生成期间笔记正文发生变化，本次结果未写入；下次会重新生成");
+      throw new SourceChangedError("AI 生成期间笔记正文发生变化，本次结果未写入；下次会重新生成", currentFingerprint);
+    }
+  }
+
+  // 顺序关键点：请求真正发出之前的最后一次校验。
+  // 队列可能已经等待了几十秒（请求间隔 / 其他笔记的任务），这里再确认正文没有变动，
+  // 避免为已经过期的正文白花一次 API 调用。没有 expectedFingerprint 的调用
+  //（例如「测试 API」、非笔记类请求）直接跳过。
+  async assertSourceUnchangedBeforeRequest(context = {}) {
+    const expectedFingerprint = context.expectedFingerprint;
+    const filePath = context.filePath;
+    if (!expectedFingerprint || !filePath) return;
+
+    const file = this.app.vault.getAbstractFileByPath(filePath);
+    if (!(file instanceof TFile)) {
+      throw new SourceChangedError(`笔记已不存在或已移出目录，本次 API 请求未发出：${filePath}`);
+    }
+    const currentFingerprint = await this.readCurrentFingerprint(file);
+    if (currentFingerprint !== expectedFingerprint) {
+      throw new SourceChangedError(`笔记正文在等待 API 请求期间已变动，本次请求未发出，也不会写入元数据；请重新触发：${filePath}`, currentFingerprint);
     }
   }
 
@@ -1376,13 +1450,14 @@ module.exports = class AiMetadataPlugin extends Plugin {
     return match ? match[1] : "";
   }
 
-  // 内容指纹会忽略由 AI 管理的 legacy summary、summary_short、summary_long、tags、technical_depth 行，因此插件自身写入不会造成循环更新。
+  // 内容指纹会忽略由 AI 管理的 legacy summary、summary_short、summary_long、tags、technical_depth 行，
+  // 以及其它插件自动写入的派生字段（见 FINGERPRINT_IGNORED_KEYS），因此这些写入不会造成误报或循环更新。
   computeSourceFingerprint(raw, file) {
     const body = this.stripFrontmatter(raw).replace(/\r\n/g, "\n").trim();
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter || {};
     const sanitized = {};
     Object.keys(fm)
-      .filter((key) => !["summary", "summary_short", "summary_long", "tags", "technical_depth", "take", "qa", "AI_summary_short", "AI_summary_long", "AI_tags", "AI_technical_depth", "AI_take", "AI_qa", "AI_title", "position"].includes(key))
+      .filter((key) => !FINGERPRINT_IGNORED_KEYS.includes(key))
       .sort()
       .forEach((key) => {
         sanitized[key] = this.stableClone(fm[key]);
@@ -3074,6 +3149,15 @@ module.exports = class AiMetadataPlugin extends Plugin {
         if (showNotice) new Notice(`xyblue135 私人·AI 元数据：跳过 ${file.basename}：无可分析正文`);
         return { success: false, skipped: true, message: "无可分析正文" };
       }
+      if (error && error.code === "SOURCE_CHANGED") {
+        record.lastError = "";
+        record.lastErrorType = "";
+        record.lastRawModelOutput = "";
+        this.state.files[file.path] = record;
+        await this.saveAllData();
+        if (showNotice) new Notice(`xyblue135 私人·AI 元数据：正文已变动，本次 API 请求未发出：${file.basename}`, 7000);
+        return { success: false, skipped: true, message: "正文已变动，请求未发出" };
+      }
       record.lastError = message.slice(0, 1000);
       record.lastErrorType = error && error.code ? String(error.code) : "ERROR";
       record.lastRawModelOutput = error && error.rawOutput ? String(error.rawOutput).slice(0, 16000) : "";
@@ -3242,17 +3326,21 @@ module.exports = class AiMetadataPlugin extends Plugin {
             if (typeof onProgress === "function") onProgress({ phase: "stopping", folder, filePath: file.path, ...progress });
             break;
           }
-          if (error && ["FILE_LEFT_SCOPE", "FILE_UNAVAILABLE", "STATUS_NOT_DONE"].includes(error.code)) {
+          if (error && ["FILE_LEFT_SCOPE", "FILE_UNAVAILABLE", "STATUS_NOT_DONE", "SOURCE_CHANGED"].includes(error.code)) {
             const message = error.code === "FILE_LEFT_SCOPE"
               ? "任务执行期间文件已移出当前识别目录"
               : error.code === "STATUS_NOT_DONE"
                 ? "文章 status 已不再是 done，按元数据校验规则跳过"
-                : error.message;
+                : error.code === "SOURCE_CHANGED"
+                  ? "正文在等待请求期间已变动，本次请求未发出"
+                  : error.message;
             const kind = error.code === "FILE_LEFT_SCOPE"
               ? "moved-out"
               : error.code === "STATUS_NOT_DONE"
                 ? "status-filtered"
-                : "unavailable";
+                : error.code === "SOURCE_CHANGED"
+                  ? "source-changed"
+                  : "unavailable";
             skippedFiles.push({ path: file.path || queued.queuedPath, originalPath: queued.queuedPath, message, kind });
             if (typeof onProgress === "function") onProgress({ phase: "skipped", folder, filePath: file.path || queued.queuedPath, message, ...progress });
             continue;
@@ -3414,6 +3502,12 @@ module.exports = class AiMetadataPlugin extends Plugin {
             record.lastErrorType = "";
             record.lastRawModelOutput = "";
           } else if (error && error.code === "STATUS_NOT_DONE") {
+            skipped += 1;
+            record.lastError = "";
+            record.lastErrorType = "";
+            record.lastRawModelOutput = "";
+          } else if (error && error.code === "SOURCE_CHANGED") {
+            // 请求未发出：不计入失败，也不留下错误记录。
             skipped += 1;
             record.lastError = "";
             record.lastErrorType = "";
