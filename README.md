@@ -15,6 +15,7 @@ xyblue135 自建的一组 Obsidian 插件（开放源代码），统一在此仓
 | 00_xyblue135-image-zoom | xyblue135 · 图片缩放与相框 |
 | 00_xyblue135-mirror | xyblue135 私人 · 附件镜像 |
 | 00_xyblue135-docs-logo | xyblue135 · 笔记状态 |
+| 00_xyblue135-theme | xyblue135 · 修改ob的css等相关样式 |
 
 ## 结构
 
