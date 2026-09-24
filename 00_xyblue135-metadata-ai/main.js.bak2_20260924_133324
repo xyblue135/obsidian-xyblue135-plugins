@@ -55,6 +55,14 @@ const DEFAULT_SUMMARY_LONG_HARNESS = [
   "禁止输出类似‘设备故障，测试A/B得出结论；使用模块X、Y完成改造，信号Z待验证’这种高度压缩的技术速记，必须改写成自然的文章概述。",
 ].join("\n");
 
+const TAG_VALUE_SAFETY_PROTOCOL = [
+  "标签 value 必须能直接作为本插件允许的 Obsidian tag value 使用。",
+  "只允许：中文汉字、英文字母 A-Z/a-z、数字 0-9、下划线 _、连字符 -；并且标签不能是纯数字。",
+  "禁止：空格、/、#、+、.、:、;、括号、引号及其他标点或特殊字符；不得输出层级标签。",
+  "技术名词原名含非法字符时，必须转换为语义等价的合法标签，例如：B+树→BPlus树，C++→CPlusPlus，C#→CSharp，.NET→DotNet，Node.js→NodeJS。",
+  "输出前逐个检查 value；任何不满足字符规则的候选都不要输出。",
+].join("\n");
+
 const LEGACY_TAGS_HARNESS_V042 = [
   "标签只保留 value，不使用 skill/Linux、domain/云计算 这类层级前缀。",
   "按与笔记内容的相关性给候选标签分配 weight，weight 越高越重要。",
@@ -523,104 +531,6 @@ const METADATA_KINDS = [
   "qa",
 ];
 
-// ==================== 格式校验（纯本地正则，与提示词完全分开） ====================
-// 设计约束：
-// 1) 只做校验，不调用 AI、不写盘、不改数据；结果只弹窗展示。
-// 2) 每个字段一组正则，一行一条，**全部匹配**才算通过（可用 /表达式/标志 语法）。
-// 3) 以 # 开头的行是注释，方便把「校验目标 / 期望格式」写在规则里对照提示词。
-// 4) 正则完全由用户在设置页维护，与 Harness（提示词）是两套独立配置。
-// 校验目标由代码固定，并会写进设置页各模块的说明里：
-//   ai_title / tags            → 数组每项占一行拼接（不 trim、不加 "- " 前缀）
-//   summary_short/long/take/qa → 字段原始字符串（多行块标量含换行）
-//   technical_depth            → 字段值的字符串形式
-const FORMAT_CHECK_TARGETS = {
-  ai_title: "AI_title 数组的每一项占一行拼接（不加 \"- \" 前缀、不额外 trim）",
-  tags: "AI_tags 数组的每一项占一行拼接（不加 \"- \" 前缀、不额外 trim）",
-  summary_short: "AI_summary_short 的原始字符串",
-  summary_long: "AI_summary_long 的原始字符串",
-  technical_depth: "AI_technical_depth 值的字符串形式",
-  take: "AI_take 的原始字符串（多行块标量按原样，含换行）",
-  qa: "AI_qa 的原始字符串（多行块标量按原样，含换行）",
-};
-
-// 「缺失元数据补全 / 顺序修正」子模块用的元数据顺序。
-// 一行一个 frontmatter 键；补全会按这个顺序插入缺失字段，顺序巡检也按它判断对错。
-// 只处理本插件的 AI_ 字段，status / visibility / updated / token_count 等键一律不动。
-const DEFAULT_METADATA_KEY_ORDER = [
-  "AI_title",
-  "AI_tags",
-  "AI_summary_short",
-  "AI_summary_long",
-  "AI_technical_depth",
-  "AI_take",
-  "AI_qa",
-].join("\n");
-
-const DEFAULT_FORMAT_CHECKS = {
-  ai_title: {
-    enabled: true,
-    rules: [
-      "# 校验目标：AI_title 数组每一项占一行拼接",
-      "# 恰好 3 行；每行必须被《》完整包裹；不允许多余空行",
-      "/^(?:《[^\\n《》]+》\\n){2}《[^\\n《》]+》$/",
-    ].join("\n"),
-  },
-  tags: {
-    enabled: true,
-    rules: [
-      "# 校验目标：AI_tags 数组每一项占一行拼接",
-      "# 数量 1~5 个，每个标签非空",
-      "/^[^\\n]+(?:\\n[^\\n]+){0,4}$/",
-    ].join("\n"),
-  },
-  summary_short: {
-    enabled: true,
-    rules: [
-      "# 校验目标：AI_summary_short 原始字符串",
-      "# 不超过 100 字符",
-      "/^[\\s\\S]{0,100}$/",
-    ].join("\n"),
-  },
-  summary_long: {
-    enabled: true,
-    rules: [
-      "# 校验目标：AI_summary_long 原始字符串",
-      "# 不超过 300 字符",
-      "/^[\\s\\S]{0,300}$/",
-    ].join("\n"),
-  },
-  technical_depth: {
-    enabled: true,
-    rules: [
-      "# 校验目标：AI_technical_depth 值的字符串形式",
-      "# 0~100 的整数",
-      "/^(?:100|[1-9]?\\d)$/",
-    ].join("\n"),
-  },
-  take: {
-    enabled: true,
-    rules: [
-      "# 校验目标：AI_take 原始字符串",
-      "# 第一条：第一行必须是该标注，不允许别的词",
-      "/^【AI锐评 仅供参考 可能出错】\\n/",
-      "# 第二条：整体不超过 200 字符",
-      "/^[\\s\\S]{0,200}$/",
-    ].join("\n"),
-  },
-  qa: {
-    enabled: true,
-    rules: [
-      "# 校验目标：AI_qa 原始字符串",
-      "# 第一条：第一行必须是「专家:」",
-      "/^专家:\\n/",
-      "# 第二条：第三行必须是空行",
-      "/^(?:[^\\n]*\\n){2}\\n/",
-      "# 第三条：第四行必须以「答:」开头",
-      "/^(?:[^\\n]*\\n){3}答:/",
-    ].join("\n"),
-  },
-};
-
 const DEFAULT_SETTINGS = {
   baseUrl: "http://192.168.3.101:3001/v1",
   apiKey: "",
@@ -668,23 +578,12 @@ const DEFAULT_SETTINGS = {
   aiTitleMaxItems: 5,
   aiTitleMaxItemsEnabled: true,
   aiTitleHarness: DEFAULT_AI_TITLE_HARNESS,
-  // 格式校验配置（纯本地正则，与上面的 Harness 提示词分开存放，互不影响）。
-  // 结构见 DEFAULT_FORMAT_CHECKS：{ [kind]: { enabled, rules } }
-  formatChecks: DEFAULT_FORMAT_CHECKS,
-  // 日志与报错（设置页「目录更新管理 → 日志与报错」）
-  logMaxEntries: 300,
-  logRetentionDays: 3,
-  // 「缺失元数据补全 / 顺序修正」的元数据顺序（一行一个键）
-  metadataKeyOrder: DEFAULT_METADATA_KEY_ORDER,
 };
 
 const DEFAULT_STATE = {
   files: {},
   // 仅运行期缓存：Tag Catalog 每次启动后从 Vault 重建，不再持久化到 data.json。
   tagCatalog: {},
-  // 运行日志（含报错）。持久化到 data.json，长度受 settings.logMaxEntries 限制，
-  // 并按 settings.logRetentionDays 定期清理。内容只包含插件自己的错误与摘要，不含正文。
-  logs: [],
 };
 
 class EmptyNoteBodyError extends Error {
@@ -797,10 +696,6 @@ module.exports = class AiMetadataPlugin extends Plugin {
     if (!harnessWasSaved("qaHarness")) this.settings.qaHarness = DEFAULT_QA_HARNESS;
     this.settings.aiTitleHarnessEnabled = true;
     if (!harnessWasSaved("aiTitleHarness")) this.settings.aiTitleHarness = DEFAULT_AI_TITLE_HARNESS;
-    // 格式校验配置：逐字段与默认值合并填充。
-    // 不能整体覆盖 —— 旧 data.json 没有 formatChecks，或缺其中几个字段，
-    // 整体覆盖会让缺失项变成 undefined，后面读写 rules 就会炸。
-    this.settings.formatChecks = this.mergeFormatChecks(savedSettings.formatChecks);
     // 结构化合并请求已下线：强制关闭合并、内容指纹与摘要 Markdown 清理；自动更新改为逐字段单个请求。
     this.settings.experimentalCombinedRequestEnabled = false;
     this.settings.contentFingerprintEnabled = false;
@@ -809,12 +704,6 @@ module.exports = class AiMetadataPlugin extends Plugin {
     this.state.files = this.loadPersistedFileState(savedState.files || {});
     // Tag Catalog 只存在于当前运行内存中，避免普通编辑/Tag 扫描反复改写 data.json。
     this.state.tagCatalog = {};
-    // 运行日志：从磁盘恢复 → 按保留天数清理。这里先只做恢复与清理，
-    // 不追加「启动」记录：scheduleStateSave() 依赖的 this.saveTimer 还没初始化。
-    this.state.logs = Array.isArray(savedState.logs)
-      ? savedState.logs.filter((entry) => entry && typeof entry === "object").slice(-2000)
-      : [];
-    this.pruneLogs();
     // 记录原始磁盘内容签名；首次 saveAllData() 会自动清理旧版运行状态字段。
     this.lastPersistedDataSignature = JSON.stringify(saved);
 
@@ -850,13 +739,8 @@ module.exports = class AiMetadataPlugin extends Plugin {
     this.lastApiCompletedAt = 0;
     this.activeHttpRequests = new Set();
     this.manualFolderRun = null;
-    this.inspectionRun = null;
-    this.gapRun = null;
     this.runtimeStatus = { mode: "idle" };
     this.lastCycleSummary = "";
-
-    // 计时器已就绪，现在可以安全地写日志了。
-    this.appendLog("info", `插件已加载（v${this.manifest && this.manifest.version ? this.manifest.version : "?"}）；日志上限 ${this.settings.logMaxEntries} 条，保留 ${this.settings.logRetentionDays} 天`);
 
     this.statusBarItem = this.addStatusBarItem();
     if (this.statusBarItem) {
@@ -922,14 +806,9 @@ module.exports = class AiMetadataPlugin extends Plugin {
       callback: () => this.openPendingNotesDashboard(),
     });
     this.addCommand({
-      id: "open-format-inspection",
-      name: "格式巡检：手动巡检一次（正则校验 AI 元数据格式）",
-      callback: () => this.openFormatInspection(),
-    });
-    this.addCommand({
-      id: "open-metadata-gap",
-      name: "缺失元数据补全 / 顺序修正：巡检一次",
-      callback: () => this.openMetadataGap(),
+      id: "export-whitelist-folder",
+      name: "导出 00_docs 白名单目录（含提示词）",
+      callback: () => void this.exportWhitelistFolder(),
     });
 
     this.app.workspace.onLayoutReady(() => {
@@ -1011,7 +890,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
       try { req.destroy(new Error("Obsidian/plugin closed")); } catch (_) {}
     }
     if (this.activeHttpRequests) this.activeHttpRequests.clear();
-    document.querySelectorAll(".ai-metadata-property-button, .ai-metadata-check-button").forEach((el) => el.remove());
+    document.querySelectorAll(".ai-metadata-property-button").forEach((el) => el.remove());
     document.querySelectorAll(".ai-metadata-enabled-row").forEach((el) => el.removeClass("ai-metadata-enabled-row"));
   }
 
@@ -1040,158 +919,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
       }
       if (Object.keys(record).length) files[path] = record;
     }
-    return { files, logs: this.state.logs || [] };
-  }
-
-  // 字段 kind ↔ 完成度标志名 ↔ 类别名，三处共用一份映射，避免再出现「漏了 Take / QA」这类不一致。
-  completionFlagForKind(kind) {
-    const map = {
-      ai_title: "titleDone",
-      tags: "tagsDone",
-      summary_short: "summaryShortDone",
-      summary_long: "summaryLongDone",
-      technical_depth: "technicalDepthDone",
-      take: "takeDone",
-      qa: "qaDone",
-    };
-    return map[kind] || "";
-  }
-
-  // 返回该笔记「键不存在」的字段列表（按 METADATA_KINDS 固定顺序）。
-  getPendingKinds(file) {
-    const completion = this.getMetadataCompletion(file, "");
-    return METADATA_KINDS.filter((kind) => !completion[this.completionFlagForKind(kind)]);
-  }
-
-  // ==================== 运行日志与报错（设置页「目录更新管理 → 日志与报错」） ====================
-  // 只记录插件自身的运行结果与错误摘要，不记录笔记正文。
-  // 存储：state.logs（持久化到 data.json），条数受 settings.logMaxEntries 限制，
-  // 时间上受 settings.logRetentionDays 限制（超期条目由 pruneLogs() 清理）。
-
-  appendLog(level, message, detail = {}) {
-    if (!this.state) return null;
-    if (!Array.isArray(this.state.logs)) this.state.logs = [];
-    const entry = {
-      at: Date.now(),
-      level: String(level || "info"),
-      message: String(message ?? "").slice(0, 2000),
-      file: detail.filePath ? String(detail.filePath) : "",
-      phase: detail.phase ? String(detail.phase) : "",
-      errorType: detail.errorType ? String(detail.errorType) : "",
-      raw: detail.raw ? String(detail.raw).slice(0, 4000) : "",
-    };
-    this.state.logs.push(entry);
-    this.trimLogs();
-    if (this.saveTimer !== undefined) this.scheduleStateSave();
-    return entry;
-  }
-
-  trimLogs() {
-    const logs = Array.isArray(this.state?.logs) ? this.state.logs : [];
-    const cap = Math.max(20, Math.min(2000, Number(this.settings.logMaxEntries) || 300));
-    if (logs.length > cap) logs.splice(0, logs.length - cap);
-    return logs.length;
-  }
-
-  // 按保留天数清理；返回删除条数。logRetentionDays <= 0 表示不按时间清理。
-  pruneLogs() {
-    const days = Number(this.settings?.logRetentionDays);
-    const logs = Array.isArray(this.state?.logs) ? this.state.logs : [];
-    if (!Number.isFinite(days) || days <= 0 || !logs.length) {
-      this.trimLogs();
-      return 0;
-    }
-    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-    const kept = logs.filter((entry) => Number(entry && entry.at) >= cutoff);
-    const removed = logs.length - kept.length;
-    this.state.logs = kept;
-    this.trimLogs();
-    if (removed && this.saveTimer !== undefined) this.scheduleStateSave();
-    return removed;
-  }
-
-  clearLogs() {
-    const count = Array.isArray(this.state?.logs) ? this.state.logs.length : 0;
-    this.state.logs = [];
-    if (this.saveTimer !== undefined) this.scheduleStateSave();
-    return count;
-  }
-
-  formatLogTime(at) {
-    const d = new Date(Number(at) || 0);
-    const p = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-  }
-
-  // 把一条日志整理成可粘贴的纯文本（供「复制」按钮使用）。
-  formatLogEntryForCopy(entry) {
-    const lines = [`[${this.formatLogTime(entry && entry.at)}] ${String((entry && entry.level) || "info").toUpperCase()}`];
-    const where = [entry && entry.phase, entry && entry.errorType].filter(Boolean).join(" / ");
-    if (where) lines.push(`阶段/类型：${where}`);
-    if (entry && entry.file) lines.push(`文件：${entry.file}`);
-    lines.push(`消息：${String((entry && entry.message) || "")}`);
-    if (entry && entry.raw) lines.push("", "模型原始输出：", String(entry.raw));
-    return lines.join("\n");
-  }
-
-  // 复制到剪贴板（优先 navigator.clipboard，失败则回退到临时 textarea）。
-  async copyTextToClipboard(text) {
-    const value = String(text ?? "");
-    try {
-      if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(value);
-        return true;
-      }
-    } catch (_) {
-      // 回退方案
-    }
-    try {
-      const area = document.createElement("textarea");
-      area.value = value;
-      area.setAttribute("style", "position:fixed;left:-9999px;top:0;");
-      document.body.appendChild(area);
-      area.select();
-      const ok = document.execCommand("copy");
-      area.remove();
-      return ok;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  // 按笔记汇总「上次错误」（来自 state.files，与日志互为补充：
-  // 即使日志被清理，每篇笔记的最后一次错误仍然留在这里）。
-  getFileErrorSummary() {
-    const rows = [];
-    for (const [path, record] of Object.entries(this.state?.files || {})) {
-      if (!record || typeof record !== "object" || !record.lastError) continue;
-      rows.push({
-        path,
-        lastError: record.lastError,
-        lastErrorType: record.lastErrorType || "",
-        lastRawModelOutput: record.lastRawModelOutput || "",
-      });
-    }
-    rows.sort((a, b) => a.path.localeCompare(b.path, "zh-CN"));
-    return rows;
-  }
-
-  getLogStats() {
-    const logs = Array.isArray(this.state?.logs) ? this.state.logs : [];
-    const byLevel = {};
-    for (const entry of logs) {
-      const level = String((entry && entry.level) || "info");
-      byLevel[level] = (byLevel[level] || 0) + 1;
-    }
-    return {
-      total: logs.length,
-      byLevel,
-      errors: byLevel.error || 0,
-      warns: byLevel.warn || 0,
-      fileErrors: this.getFileErrorSummary().length,
-      maxEntries: Math.max(20, Math.min(2000, Number(this.settings.logMaxEntries) || 300)),
-      retentionDays: Number(this.settings.logRetentionDays) || 0,
-    };
+    return { files };
   }
 
   async saveAllData() {
@@ -1314,8 +1042,6 @@ module.exports = class AiMetadataPlugin extends Plugin {
 
   async waitForApiGap(context = {}) {
     this.ensureTaskActive(context.abortSignal);
-    // 「每次生成完成后到下一个之间的等待时间」统一取全局设置 requestIntervalSeconds（默认 30 秒）。
-    // 所有流程（批量识别、单篇补全、✨ 单字段、巡检修复、缺失补全）共用这一个值。
     const gapMs = Math.max(0, Number(this.settings.requestIntervalSeconds) || 0) * 1000;
     if (!this.lastApiCompletedAt || gapMs <= 0) return;
     const waitMs = this.lastApiCompletedAt + gapMs - Date.now();
@@ -1407,7 +1133,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
   }
 
   clearInjectedButtons() {
-    document.querySelectorAll(".ai-metadata-property-button, .ai-metadata-check-button").forEach((el) => el.remove());
+    document.querySelectorAll(".ai-metadata-property-button").forEach((el) => el.remove());
     document.querySelectorAll(".ai-metadata-enabled-row").forEach((el) => el.removeClass("ai-metadata-enabled-row"));
   }
 
@@ -1420,7 +1146,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
 
     // 只向当前活动工作区叶节点注入按钮，避免按钮误操作其他已打开笔记。
     const scope = document.querySelector(".workspace-leaf.mod-active") || document;
-    document.querySelectorAll(".ai-metadata-property-button, .ai-metadata-check-button").forEach((button) => {
+    document.querySelectorAll(".ai-metadata-property-button").forEach((button) => {
       if (!scope.contains(button)) {
         const row = button.closest(".metadata-property");
         if (row) row.removeClass("ai-metadata-enabled-row");
@@ -1430,60 +1156,39 @@ module.exports = class AiMetadataPlugin extends Plugin {
     ["summary_short", "summary_long", "tags", "technical_depth", "take", "qa", "ai_title"].forEach((kind) => {
       const rows = this.findPropertyRows(kind, scope);
       rows.forEach((row) => {
-        const aiLabel = kind === "summary_short"
-          ? "AI 只生成 AI_summary_short"
-          : kind === "summary_long"
-            ? "AI 只生成 AI_summary_long"
-            : kind === "tags"
-              ? "AI 只生成 weighted tags"
-              : kind === "technical_depth"
-                ? "AI 只评估 AI_technical_depth"
-                : kind === "take"
-                  ? "AI 只生成客观评价 AI_take"
-                  : kind === "qa"
-                    ? "AI 只生成面试问答 AI_qa"
-                    : "AI 只生成参考标题 AI_title";
+        if (row.querySelector(`.ai-metadata-property-button[data-ai-kind="${kind}"]`)) return;
         row.addClass("ai-metadata-enabled-row");
-
-        // ✨：调用 AI 生成该字段（原行为不变）。单字段按钮绝不顺带修改另一个字段。
-        if (!row.querySelector(`.ai-metadata-property-button[data-ai-kind="${kind}"]`)) {
-          const button = row.createEl("button", {
-            cls: "ai-metadata-property-button clickable-icon",
-            attr: { "aria-label": aiLabel, "data-ai-kind": kind, type: "button" },
-          });
-          setIcon(button, "sparkles");
-          button.addEventListener("mousedown", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          });
-          button.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void this.generateForActiveFile(kind, button);
-          });
-        }
-
-        // ✓：紧跟在 ✨ 右侧，只做本地正则格式校验 —— 不调用 AI、不写盘、不改数据，只弹窗报告。
-        if (!row.querySelector(`.ai-metadata-check-button[data-ai-check-kind="${kind}"]`)) {
-          const checkButton = row.createEl("button", {
-            cls: "ai-metadata-check-button clickable-icon",
-            attr: {
-              "aria-label": `格式校验：检查 ${this.fieldKeyForKind(kind)} 是否符合设置里的正则规则（纯本地，不调用 AI）`,
-              "data-ai-check-kind": kind,
-              type: "button",
-            },
-          });
-          setIcon(checkButton, "shield-check");
-          checkButton.addEventListener("mousedown", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          });
-          checkButton.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            this.checkFormatForActiveFile(kind);
-          });
-        }
+        // Properties 行内按钮固定为单字段操作；批量、自动或 all 操作仍可使用 Beta 四项元数据单请求路径，但单字段按钮绝不顺带修改另一个字段。
+        const button = row.createEl("button", {
+          cls: "ai-metadata-property-button clickable-icon",
+          attr: {
+            "aria-label": kind === "summary_short"
+              ? "AI 只生成 AI_summary_short"
+              : kind === "summary_long"
+                ? "AI 只生成 AI_summary_long"
+                : kind === "tags"
+                  ? "AI 只生成 weighted tags"
+                  : kind === "technical_depth"
+                    ? "AI 只评估 AI_technical_depth"
+                    : kind === "take"
+                      ? "AI 只生成客观评价 AI_take"
+                      : kind === "qa"
+                        ? "AI 只生成面试问答 AI_qa"
+                        : "AI 只生成参考标题 AI_title",
+            "data-ai-kind": kind,
+            type: "button",
+          },
+        });
+        setIcon(button, "sparkles");
+        button.addEventListener("mousedown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        });
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void this.generateForActiveFile(kind, button);
+        });
       });
     });
   }
@@ -1512,596 +1217,6 @@ module.exports = class AiMetadataPlugin extends Plugin {
       const keyText = (keyInput && keyInput.value) || (keyEl && keyEl.innerText) || "";
       return keyText.trim() === field;
     });
-  }
-
-  // ==================== 格式校验（纯本地正则：不调用 AI、不写盘、不改数据） ====================
-
-  // 逐字段与默认值合并，保证任何缺失项都回落到默认规则。
-  // 不能整体覆盖 saved：旧 data.json 没有 formatChecks，整体覆盖会让 rules 变成 undefined。
-  mergeFormatChecks(saved) {
-    const merged = {};
-    for (const kind of METADATA_KINDS) {
-      const fallback = DEFAULT_FORMAT_CHECKS[kind] || { enabled: false, rules: "" };
-      const incoming = (saved && typeof saved === "object") ? saved[kind] : null;
-      const hasIncoming = incoming && typeof incoming === "object";
-      merged[kind] = {
-        enabled: hasIncoming && typeof incoming.enabled === "boolean"
-          ? incoming.enabled
-          : fallback.enabled !== false,
-        rules: hasIncoming && typeof incoming.rules === "string"
-          ? incoming.rules
-          : fallback.rules,
-      };
-    }
-    return merged;
-  }
-
-  getFormatCheckConfig(kind) {
-    const config = (this.settings.formatChecks || {})[kind];
-    if (config && typeof config === "object") return config;
-    return DEFAULT_FORMAT_CHECKS[kind] || { enabled: false, rules: "" };
-  }
-
-  // 校验目标：把字段值转成固定形式的文本，正则就作用在这个文本上。
-  // 数组字段（AI_title / AI_tags）每项占一行拼接，不加 "- " 前缀、不额外 trim，
-  // 这样「每行必须《》包裹」「共几行」都能用普通正则表达。
-  // frontmatterOverride：供「二次验证」用磁盘原文解析出的 frontmatter，绕开可能尚未刷新的 metadataCache。
-  getFormatCheckTarget(kind, file, frontmatterOverride = null) {
-    const fm = frontmatterOverride || this.app.metadataCache.getFileCache(file)?.frontmatter || {};
-    const key = this.fieldKeyForKind(kind);
-    if (!Object.prototype.hasOwnProperty.call(fm, key)) return { present: false, text: "" };
-    const value = fm[key];
-    if (kind === "tags" || kind === "ai_title") {
-      const items = Array.isArray(value)
-        ? value
-        : (value === null || value === undefined || value === "" ? [] : [value]);
-      return { present: true, text: items.map((item) => String(item ?? "")).join("\n") };
-    }
-    if (value === null || value === undefined) return { present: true, text: "" };
-    return { present: true, text: String(value) };
-  }
-
-  // 规则行语法：/表达式/标志（例：/^《.+》$/m）；也允许省略斜杠直接写表达式。
-  // 以 # 开头的行是注释；空行忽略。正则本身写错不会抛错，会作为一条「失败」规则报告出来。
-  parseFormatCheckRules(rulesText) {
-    const rules = [];
-    for (const rawLine of String(rulesText ?? "").split(/\r?\n/)) {
-      const line = rawLine.trim();
-      if (!line || line.startsWith("#")) continue;
-      const match = /^\/(.*)\/([a-z]*)$/.exec(line);
-      try {
-        rules.push({ source: line, re: match ? new RegExp(match[1], match[2]) : new RegExp(line) });
-      } catch (error) {
-        rules.push({ source: line, re: null, error: error instanceof Error ? error.message : String(error) });
-      }
-    }
-    return rules;
-  }
-
-  runFormatCheck(kind, file) {
-    const config = this.getFormatCheckConfig(kind);
-    const target = this.getFormatCheckTarget(kind, file);
-    const result = {
-      kind,
-      fieldKey: this.fieldKeyForKind(kind),
-      present: target.present,
-      text: target.text,
-      targetDescription: FORMAT_CHECK_TARGETS[kind] || "",
-      rules: [],
-      passed: true,
-      skipped: false,
-      reason: "",
-    };
-
-    if (config.enabled === false) {
-      result.skipped = true;
-      result.reason = "该字段的格式校验已在设置里关闭";
-      return result;
-    }
-    const rules = this.parseFormatCheckRules(config.rules);
-    if (!rules.length) {
-      result.skipped = true;
-      result.reason = "没有配置任何校验规则";
-      return result;
-    }
-    if (!target.present) {
-      result.passed = false;
-      result.reason = "字段不存在";
-      return result;
-    }
-
-    for (const rule of rules) {
-      if (!rule.re) {
-        result.rules.push({ source: rule.source, ok: false, error: rule.error });
-        result.passed = false;
-        continue;
-      }
-      // 带 g / y 标志的正则带 lastIndex 状态，必须归零，否则第二次校验会从上次位置接着匹配。
-      rule.re.lastIndex = 0;
-      const ok = rule.re.test(target.text);
-      rule.re.lastIndex = 0;
-      result.rules.push({ source: rule.source, ok });
-      if (!ok) result.passed = false;
-    }
-    return result;
-  }
-
-  checkFormatForActiveFile(kind) {
-    const file = this.app.workspace.getActiveFile();
-    if (!(file instanceof TFile) || file.extension !== "md") {
-      new Notice("xyblue135 私人·AI 元数据：请先打开一个 Markdown 笔记");
-      return;
-    }
-    if (!this.isWhitelisted(file)) {
-      new Notice(`xyblue135 私人·AI 元数据：仅允许校验 /${this.normalizeWhitelistFolder()} 目录中的 Markdown`);
-      return;
-    }
-    new FormatCheckModal(this.app, this, this.runFormatCheck(kind, file), file).open();
-  }
-
-  // ==================== 格式巡检（手动一次；不改数据，只报告） ====================
-  // 只巡检白名单目录（并按 status: done 过滤），对 7 个字段跑各模块设置里的正则。
-  // 三个类别：
-  //   fail    = 字段有内容，但正则不通过（你重点关注的那类）
-  //   empty   = 字段存在但值为空
-  //   missing = 字段键不存在
-  // 修复是「逐项、只改这一个字段」，修完只做一次二次验证，不重复运行。
-
-  // 从磁盘原文解析 frontmatter 里的 7 个 AI 字段（支持普通标量、块标量、块序列、内联数组）。
-  // 二次验证必须用磁盘原文：processFrontMatter 写完后 metadataCache 是异步刷新的，
-  // 直接读缓存可能拿到旧值，导致「刚修好却报仍不通过」。
-  parseAiFieldsFromRaw(raw) {
-    const out = {};
-    const block = /^---\r?\n([\s\S]*?)\r?\n---/.exec(String(raw || ""));
-    if (!block) return out;
-    const lines = block[1].split(/\r?\n/);
-    for (let i = 0; i < lines.length; i += 1) {
-      const kv = /^([A-Za-z0-9_]+)\s*:\s*(.*)$/.exec(lines[i]);
-      if (!kv || !kv[1].startsWith("AI_")) continue;
-      const key = kv[1];
-      const rest = kv[2].trim();
-      if (rest === "") {
-        // 可能是块序列（后续 "- 项"），也可能是空值
-        const items = [];
-        for (let k = i + 1; k < lines.length; k += 1) {
-          const item = /^\s*-\s+(.*)$/.exec(lines[k]);
-          if (!item) break;
-          items.push(item[1].trim().replace(/^["']|["']$/g, ""));
-        }
-        out[key] = items.length ? items : null;
-      } else if (/^[|>][-+]?\d*$/.test(rest)) {
-        const body = [];
-        for (let k = i + 1; k < lines.length; k += 1) {
-          if (lines[k].trim() === "") { body.push(""); continue; }
-          if (!/^\s/.test(lines[k])) break;
-          body.push(lines[k].replace(/^ {2}/, ""));
-        }
-        while (body.length && body[body.length - 1] === "") body.pop();
-        out[key] = body.join("\n");
-      } else if (rest.startsWith("[")) {
-        try { out[key] = JSON.parse(rest); } catch (_) { out[key] = rest; }
-      } else if (rest === '""' || rest === "''") {
-        out[key] = "";
-      } else {
-        out[key] = rest.replace(/^["']|["']$/g, "");
-      }
-    }
-    return out;
-  }
-
-  async runFormatInspection(options = {}) {
-    const includeMissing = options.includeMissing !== false;
-    const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
-    const allFiles = this.getNotesFiles();
-    const files = this.settings.statusDoneOnlyEnabled === true
-      ? allFiles.filter((file) => this.isRecognitionEligible(file))
-      : allFiles;
-    const stats = {
-      whitelistTotal: allFiles.length,
-      scanned: 0,
-      statusFiltered: Math.max(0, allFiles.length - files.length),
-      statusFilterEnabled: this.settings.statusDoneOnlyEnabled === true,
-      pass: 0,
-      fail: 0,
-      empty: 0,
-      missing: 0,
-      rulesSkipped: 0,
-      filesWithIssue: 0,
-      scannedAt: Date.now(),
-    };
-    const items = [];
-
-    // 性能优化：每个字段的正则只解析一次。
-    // 原来是在「每篇 × 每字段」里重复 parseFormatCheckRules → new RegExp，
-    // 750 篇 × 7 字段 = 5000+ 次重复编译，这是巡检卡顿的主因。
-    const compiled = new Map();
-    for (const kind of METADATA_KINDS) {
-      const config = this.getFormatCheckConfig(kind);
-      if (config.enabled === false) {
-        compiled.set(kind, { rules: [], skipped: true });
-        continue;
-      }
-      const rules = this.parseFormatCheckRules(config.rules);
-      compiled.set(kind, { rules, skipped: rules.length === 0 });
-    }
-    const fieldKeys = new Map(METADATA_KINDS.map((kind) => [kind, this.fieldKeyForKind(kind)]));
-
-    for (const file of files) {
-      stats.scanned += 1;
-      if (onProgress && stats.scanned % 20 === 0) {
-        onProgress({ scanned: stats.scanned, total: files.length, path: file.path });
-      }
-      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter || {};
-      const isListField = (kind) => kind === "tags" || kind === "ai_title";
-      let issues = 0;
-
-      for (const kind of METADATA_KINDS) {
-        const { rules, skipped } = compiled.get(kind);
-        if (skipped) { stats.rulesSkipped += 1; continue; }
-
-        const fieldKey = fieldKeys.get(kind);
-        const present = Object.prototype.hasOwnProperty.call(fm, fieldKey);
-        const raw = fm[fieldKey];
-        let text = "";
-        if (present) {
-          if (isListField(kind)) {
-            const list = Array.isArray(raw) ? raw : (raw === null || raw === undefined || raw === "" ? [] : [raw]);
-            text = list.map((v) => String(v ?? "")).join("\n");
-          } else {
-            text = raw === null || raw === undefined ? "" : String(raw);
-          }
-        }
-
-        if (!present) {
-          if (!includeMissing) continue;
-          stats.missing += 1; issues += 1;
-          items.push({ file, path: file.path, kind, fieldKey, category: "missing", text: "", failedRules: [] });
-          continue;
-        }
-        if (!text.trim()) {
-          if (!includeMissing) continue;
-          stats.empty += 1; issues += 1;
-          items.push({ file, path: file.path, kind, fieldKey, category: "empty", text, failedRules: [] });
-          continue;
-        }
-
-        const failed = [];
-        for (const rule of rules) {
-          if (!rule.re) { failed.push(`${rule.source}  ← 正则本身有错：${rule.error}`); continue; }
-          rule.re.lastIndex = 0;
-          const ok = rule.re.test(text);
-          rule.re.lastIndex = 0;
-          if (!ok) failed.push(rule.source);
-        }
-        if (!failed.length) { stats.pass += 1; continue; }
-        stats.fail += 1; issues += 1;
-        items.push({ file, path: file.path, kind, fieldKey, category: "fail", text, failedRules: failed });
-      }
-      if (issues) stats.filesWithIssue += 1;
-    }
-    if (onProgress) onProgress({ scanned: files.length, total: files.length, done: true });
-    return { items, stats };
-  }
-
-  // 二次验证：从磁盘原文重新解析该字段并重跑一次正则。只做一次，不循环。
-  async verifyRepairedItem(item) {
-    const config = this.getFormatCheckConfig(item.kind);
-    if (config.enabled === false) return { passed: true, skipped: true, reason: "该字段的格式校验已关闭" };
-    const rules = this.parseFormatCheckRules(config.rules);
-    if (!rules.length) return { passed: true, skipped: true, reason: "没有配置校验规则" };
-
-    const raw = await this.app.vault.read(item.file);
-    const fm = this.parseAiFieldsFromRaw(raw);
-    const target = this.getFormatCheckTarget(item.kind, item.file, fm);
-    if (!target.present) return { present: false, passed: false, reason: "修复后字段仍不存在", text: "" };
-    if (!target.text.trim()) return { present: true, passed: false, reason: "修复后字段仍为空", text: target.text };
-
-    const failed = [];
-    for (const rule of rules) {
-      if (!rule.re) { failed.push(`${rule.source}  ← 正则本身有错`); continue; }
-      rule.re.lastIndex = 0;
-      const ok = rule.re.test(target.text);
-      rule.re.lastIndex = 0;
-      if (!ok) failed.push(rule.source);
-    }
-    return {
-      present: true,
-      passed: failed.length === 0,
-      failedRules: failed,
-      text: target.text,
-      reason: failed.length ? `仍不通过：${failed.length} 条规则未匹配` : "通过",
-    };
-  }
-
-  // 逐项 AI 修复 + 修完立刻二次验证。修完不再重跑，结果交给用户手动检查。
-  async repairInspectionItems(items, onProgress = null) {
-    const results = [];
-    const controller = new AbortController();
-    this.inspectionRun = controller;
-    const total = items.length;
-    try {
-      for (let index = 0; index < items.length; index += 1) {
-        const item = items[index];
-        const progress = { index: index + 1, total, path: item.path, fieldKey: item.fieldKey };
-        if (controller.signal.aborted) {
-          results.push({ ...item, stopped: true });
-          continue;
-        }
-        if (typeof onProgress === "function") onProgress({ phase: "processing", ...progress });
-
-        let repairError = "";
-        try {
-          this.fileBusy.add(item.path);
-          // 只重新生成这一个字段，其它字段完全不动。
-          // 请求间隔统一走全局「API 请求间隔」。
-          await this.generateSelectedForFile(item.file, [item.kind], "format-repair", null, {
-            abortSignal: controller.signal,
-            respectStatusFilter: this.settings.statusDoneOnlyEnabled === true,
-          });
-        } catch (error) {
-          repairError = error instanceof Error ? error.message : String(error);
-        } finally {
-          this.fileBusy.delete(item.path);
-        }
-
-        // 二次验证（唯一一次，不重复运行）
-        const after = repairError ? null : await this.verifyRepairedItem(item);
-        const row = { ...item, repairError, after, repaired: Boolean(after && after.passed) };
-        results.push(row);
-        if (typeof onProgress === "function") {
-          onProgress({
-            phase: repairError ? "error" : (row.repaired ? "success" : "still-failing"),
-            ...progress,
-            message: repairError || (after && after.reason) || "",
-          });
-        }
-      }
-    } finally {
-      if (this.inspectionRun === controller) this.inspectionRun = null;
-      await this.saveAllData();
-    }
-    return results;
-  }
-
-  stopFormatInspection() {
-    if (!this.inspectionRun) return false;
-    try { this.inspectionRun.abort(); } catch (_) { /* ignore */ }
-    return true;
-  }
-
-  // 「本次修复数量」：全选之后只取前 N 项。limit <= 0 或非法值表示不限。
-  pickRepairItems(items, limit) {
-    const list = Array.isArray(items) ? items : [];
-    const n = Number(limit);
-    if (!Number.isFinite(n) || n <= 0) return list.slice();
-    return list.slice(0, n);
-  }
-
-  openFormatInspection() {
-    new FormatInspectionModal(this.app, this).open();
-  }
-
-  // ==================== 缺失元数据补全 / 顺序修正（子模块） ====================
-  // 职责边界：
-  //   本模块只管「存不存在」与「顺序对不对」；格式是否合规由「格式巡检」负责。
-  //   补全时逐个字段重新生成（只生成缺的那些），补完把 AI 字段按配置顺序摆正。
-  //   处理完做一次二次验证，不重复运行。
-
-  // 配置里的元数据顺序（去空行、去重；为空时回落到默认 7 项顺序）
-  getMetadataKeyOrder() {
-    const raw = String(this.settings.metadataKeyOrder || "")
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const list = raw.length ? raw : DEFAULT_METADATA_KEY_ORDER.split("\n");
-    const seen = new Set();
-    const out = [];
-    for (const key of list) {
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(key);
-    }
-    return out;
-  }
-
-  isAiMetadataKey(key) {
-    return METADATA_KINDS.some((kind) => this.fieldKeyForKind(kind) === key);
-  }
-
-  isEmptyMetadataValue(value) {
-    if (value === null || value === undefined) return true;
-    if (Array.isArray(value)) return !value.some((item) => String(item ?? "").trim() !== "");
-    return String(value).trim() === "";
-  }
-
-  // 巡检单篇：存在性（缺失 / 空值）+ AI 字段顺序
-  checkMetadataPresenceAndOrder(file) {
-    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter || {};
-    const actualKeys = Object.keys(fm);
-    const actualAi = actualKeys.filter((key) => this.isAiMetadataKey(key));
-    const order = this.getMetadataKeyOrder();
-    const missingKeys = order.filter((key) => !Object.prototype.hasOwnProperty.call(fm, key));
-    const emptyKeys = order.filter((key) => Object.prototype.hasOwnProperty.call(fm, key) && this.isEmptyMetadataValue(fm[key]));
-    // 顺序正确 = 实际出现的 AI 键，正好等于「按配置顺序过滤出的子序列」
-    const expectedAi = order.filter((key) => actualAi.includes(key));
-    const orderOk = JSON.stringify(actualAi) === JSON.stringify(expectedAi);
-    return { actualKeys, actualAi, expectedAi, order, missingKeys, emptyKeys, orderOk };
-  }
-
-  // 本地重排 AI 字段（不调用 AI）：非 AI 键保持原有相对顺序，AI 键按配置顺序
-  // 整体挪到原来第一个 AI 键所在的位置；原来没有 AI 键就追加到末尾。
-  async fixMetadataKeyOrder(file) {
-    const order = this.getMetadataKeyOrder();
-    const orderIndex = new Map(order.map((key, index) => [key, index]));
-    await this.app.fileManager.processFrontMatter(file, (fm) => {
-      const keys = Object.keys(fm);
-      const aiKeys = keys.filter((key) => this.isAiMetadataKey(key));
-      if (aiKeys.length < 2) return;
-      const sortedAi = aiKeys.slice().sort((a, b) => (orderIndex.get(a) ?? 999) - (orderIndex.get(b) ?? 999));
-      if (JSON.stringify(aiKeys) === JSON.stringify(sortedAi)) return;
-      const firstAi = keys.findIndex((key) => this.isAiMetadataKey(key));
-      const nonAi = keys.filter((key) => !this.isAiMetadataKey(key));
-      const next = {};
-      nonAi.slice(0, firstAi).forEach((key) => { next[key] = fm[key]; });
-      sortedAi.forEach((key) => { next[key] = fm[key]; });
-      nonAi.slice(firstAi).forEach((key) => { next[key] = fm[key]; });
-      Object.keys(fm).forEach((key) => delete fm[key]);
-      Object.assign(fm, next);
-    });
-  }
-
-  async runMetadataGapInspection(options = {}) {
-    const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
-    const allFiles = this.getNotesFiles();
-    const files = this.settings.statusDoneOnlyEnabled === true
-      ? allFiles.filter((file) => this.isRecognitionEligible(file))
-      : allFiles;
-    const stats = {
-      whitelistTotal: allFiles.length,
-      scanned: 0,
-      statusFiltered: Math.max(0, allFiles.length - files.length),
-      statusFilterEnabled: this.settings.statusDoneOnlyEnabled === true,
-      missingKeys: 0,
-      emptyKeys: 0,
-      orderIssues: 0,
-      complete: 0,
-      filesWithIssue: 0,
-      scannedAt: Date.now(),
-    };
-    const items = [];
-    for (const file of files) {
-      stats.scanned += 1;
-      if (onProgress && stats.scanned % 20 === 0) {
-        onProgress({ scanned: stats.scanned, total: files.length });
-      }
-      const check = this.checkMetadataPresenceAndOrder(file);
-      const hasIssue = check.missingKeys.length || check.emptyKeys.length || !check.orderOk;
-      if (!hasIssue) { stats.complete += 1; continue; }
-      stats.missingKeys += check.missingKeys.length;
-      stats.emptyKeys += check.emptyKeys.length;
-      if (!check.orderOk) stats.orderIssues += 1;
-      stats.filesWithIssue += 1;
-      items.push({
-        file,
-        path: file.path,
-        missingKeys: check.missingKeys,
-        emptyKeys: check.emptyKeys,
-        orderIssue: !check.orderOk,
-        actualAi: check.actualAi,
-        expectedAi: check.expectedAi,
-      });
-    }
-    if (onProgress) onProgress({ scanned: files.length, total: files.length, done: true });
-    return { items, stats };
-  }
-
-  // 二次验证：直接从磁盘原文判断（metadataCache 写入后是异步刷新的）
-  async verifyMetadataGaps(file) {
-    const raw = await this.app.vault.read(file);
-    const parsed = this.parseAiFieldsFromRaw(raw);
-    const aiKeysInFile = [];
-    const block = /^---\r?\n([\s\S]*?)\r?\n---/.exec(String(raw || ""));
-    if (block) {
-      for (const line of block[1].split(/\r?\n/)) {
-        const kv = /^([A-Za-z0-9_]+)\s*:/.exec(line);
-        if (kv && this.isAiMetadataKey(kv[1]) && !aiKeysInFile.includes(kv[1])) aiKeysInFile.push(kv[1]);
-      }
-    }
-    const order = this.getMetadataKeyOrder();
-    const missing = order.filter((key) => !(key in parsed) || this.isEmptyMetadataValue(parsed[key]));
-    const expectedAi = order.filter((key) => aiKeysInFile.includes(key));
-    const orderOk = JSON.stringify(aiKeysInFile) === JSON.stringify(expectedAi);
-    const ok = missing.length === 0 && orderOk;
-    return {
-      ok,
-      missing,
-      aiKeysInFile,
-      expectedAi,
-      orderOk,
-      reason: ok ? "存在性与顺序都正确" : (!missing.length ? "顺序仍不正确" : `仍缺 ${missing.length} 项`),
-    };
-  }
-
-  // 逐篇：先摆顺序 → 只补缺失/空值的字段 → 再摆一次顺序 → 二次验证（只做一次，不重复运行）
-  async fixMetadataGaps(items, onProgress = null) {
-    const results = [];
-    const controller = new AbortController();
-    this.gapRun = controller;
-    const total = items.length;
-    try {
-      for (let index = 0; index < items.length; index += 1) {
-        const item = items[index];
-        const progress = { index: index + 1, total, path: item.path };
-        if (controller.signal.aborted) {
-          results.push({ ...item, stopped: true });
-          continue;
-        }
-        if (typeof onProgress === "function") onProgress({ phase: "processing", ...progress });
-
-        let error = "";
-        try {
-          this.fileBusy.add(item.path);
-          await this.fixMetadataKeyOrder(item.file);
-          const needsFill = item.missingKeys.concat(item.emptyKeys);
-          const kinds = METADATA_KINDS.filter((kind) => needsFill.includes(this.fieldKeyForKind(kind)));
-          if (kinds.length) {
-            await this.generateSelectedForFile(item.file, kinds, "metadata-gap-fill", null, {
-              abortSignal: controller.signal,
-              respectStatusFilter: this.settings.statusDoneOnlyEnabled === true,
-            });
-          }
-          // 新写入的键会追加在末尾，这里再摆一次
-          await this.fixMetadataKeyOrder(item.file);
-        } catch (err) {
-          error = err instanceof Error ? err.message : String(err);
-        } finally {
-          this.fileBusy.delete(item.path);
-        }
-
-        const after = error ? null : await this.verifyMetadataGaps(item.file);
-        const row = { ...item, error, after, fixed: Boolean(after && after.ok) };
-        results.push(row);
-        if (typeof onProgress === "function") {
-          onProgress({
-            phase: error ? "error" : (row.fixed ? "success" : "still-issue"),
-            ...progress,
-            message: error || (after && after.reason) || "",
-          });
-        }
-      }
-    } finally {
-      if (this.gapRun === controller) this.gapRun = null;
-      await this.saveAllData();
-    }
-    return results;
-  }
-
-  stopMetadataGapRun() {
-    if (!this.gapRun) return false;
-    try { this.gapRun.abort(); } catch (_) { /* ignore */ }
-    return true;
-  }
-
-  openMetadataGap() {
-    new MetadataGapModal(this.app, this).open();
-  }
-
-  // 设置页各模块说明用：把「校验目标 + 语法 + 当前规则数」讲清楚，方便对照提示词。
-  describeFormatCheck(kind) {
-    const config = this.getFormatCheckConfig(kind);
-    const rules = this.parseFormatCheckRules(config.rules);
-    const state = config.enabled === false
-      ? "当前状态：已关闭（点 ✓ 会提示跳过）。"
-      : rules.length
-        ? `当前状态：启用，共 ${rules.length} 条规则，全部匹配才算通过。`
-        : "当前状态：启用但没有规则（点 ✓ 会提示跳过）。";
-    return [
-      "格式校验（纯本地正则，不调用 AI、不写盘、不改数据）。",
-      `校验目标：${FORMAT_CHECK_TARGETS[kind] || ""}。`,
-      "下面每一行是一条正则，写成 /表达式/标志（例：/^《.+》$/m）；以 # 开头的行是注释；所有正则全部匹配才算通过。",
-      "点 Properties 里 ✨ 右侧的 ✓ 按钮，对当前笔记的这一栏执行校验。",
-      state,
-    ].join("");
   }
 
   async generateForActiveFile(kind, button) {
@@ -2158,7 +1273,6 @@ module.exports = class AiMetadataPlugin extends Plugin {
         this.scheduleStateSave();
         setStateForButtons("idle");
         new Notice("xyblue135 私人·AI 元数据：跳过，无可分析正文");
-        this.appendLog("warn", "跳过：无可分析正文", { filePath: file.path, phase: effectiveKind });
       } else if (error && error.code === "SOURCE_CHANGED") {
         // 请求尚未发出，不算失败，也不写错误记录。
         record.lastError = "";
@@ -2168,20 +1282,12 @@ module.exports = class AiMetadataPlugin extends Plugin {
         this.scheduleStateSave();
         setStateForButtons("idle");
         new Notice("xyblue135 私人·AI 元数据：正文已变动，本次 API 请求未发出（未消耗调用），请重新触发", 7000);
-        this.appendLog("warn", "正文已变动，本次 API 请求未发出", { filePath: file.path, phase: effectiveKind });
       } else {
         record.lastError = message.slice(0, 1000);
         record.lastErrorType = error && error.code ? String(error.code) : "ERROR";
         record.lastRawModelOutput = error && error.rawOutput ? String(error.rawOutput).slice(0, 16000) : "";
         this.state.files[file.path] = record;
         this.scheduleStateSave();
-        // 写入运行日志：设置页「目录更新管理 → 日志与报错」可查看与清理。
-        this.appendLog("error", message, {
-          filePath: file.path,
-          phase: effectiveKind,
-          errorType: record.lastErrorType,
-          raw: record.lastRawModelOutput,
-        });
         setStateForButtons("error");
         this.setRuntimeStatus("error", { filePath: file.path, phase: effectiveKind, message });
         new Notice(`xyblue135 私人·AI 元数据 失败：${message}`, 7000);
@@ -2227,22 +1333,13 @@ module.exports = class AiMetadataPlugin extends Plugin {
 
     const prepared = await this.prepareFile(file);
     const currentTags = this.settings.feedMetadataToAiEnabled === true ? this.readCurrentTags(file) : [];
-    // 安全修复：这里原先会先调用 clearFieldsBeforeRun() 把本次要生成的字段值清空。
-    // 那是数据毁灭源——清空发生在请求之前，一旦请求失败、超时或批量任务被中途停止，
-    // 字段就永久停留在空值（库里 477 篇空 AI_title、465 篇空 AI_take、462 篇空 AI_qa、
-    // 76 篇空 AI_technical_depth 都是这么来的）。
-    // 而下面的写入是「全部生成成功后一次性原子写入」，本身就会覆盖旧值，
-    // 所以预清空没有任何收益，已移除。字段在生成期间保持原值，失败时也不会被改动。
+    // 每次运行前先清空本次要生成的字段（只清本次请求的字段，其它字段不动）。
+    // 清空发生在发请求之前；因为内容指纹本来就排除 AI_* 字段，所以不会影响下面的正文变动校验。
+    await this.clearFieldsBeforeRun(file, requested);
     // expectedFingerprint 会随 context 一路带进 API 队列：队列等待期间（默认 30 秒请求间隔，
     // 或前一篇笔记仍占用队列时）正文如果已经变动，就在真正发出请求之前终止，
     // 而不是等请求返回后才丢弃结果。
-    const context = {
-      filePath: file.path,
-      reason,
-      progress,
-      abortSignal,
-      expectedFingerprint: prepared.fingerprint,
-    };
+    const context = { filePath: file.path, reason, progress, abortSignal, expectedFingerprint: prepared.fingerprint };
     let result = {};
 
     // 合并请求已下线：严格串行逐字段生成；只有全部逻辑结果生成成功后才统一写入，避免半更新。
@@ -2297,26 +1394,17 @@ module.exports = class AiMetadataPlugin extends Plugin {
       if (scopeFolder) this.assertFileStillInFolder(file, scopeFolder);
       if (respectStatusFilter) this.assertRecognitionEligible(file);
       await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-        // 安全护栏：绝不把 undefined 写进 frontmatter。
-        // Obsidian 的 YAML 序列化会省略值为 undefined 的键，那等于把该属性行整个删除
-        // （实测：AI_technical_depth 曾因此被整行删掉）。这里逐个判空后才赋值，
-        // 并且只写本次请求的 7 个 AI_* 字段，绝不触碰其它任何键。
-        const assign = (key, value) => {
-          if (value === undefined) return;
-          frontmatter[key] = value;
-        };
-        if (requested.includes("summary_short")) assign("AI_summary_short", result.summaryShort);
-        if (requested.includes("summary_long")) assign("AI_summary_long", result.summaryLong);
-        if (requested.includes("tags")) assign("AI_tags", result.tags);
-        if (requested.includes("technical_depth")) assign("AI_technical_depth", result.technicalDepth);
-        if (requested.includes("take")) assign("AI_take", result.take);
-        if (requested.includes("qa")) assign("AI_qa", result.qa);
-        if (requested.includes("ai_title")) assign("AI_title", result.title);
+        if (requested.includes("summary_short")) frontmatter.AI_summary_short = result.summaryShort;
+        if (requested.includes("summary_long")) frontmatter.AI_summary_long = result.summaryLong;
+        if (requested.includes("tags")) frontmatter.AI_tags = result.tags;
+        if (requested.includes("technical_depth")) frontmatter.AI_technical_depth = result.technicalDepth;
+        if (requested.includes("take")) frontmatter.AI_take = result.take;
+        if (requested.includes("qa")) frontmatter.AI_qa = result.qa;
+        if (requested.includes("ai_title")) frontmatter.AI_title = result.title;
       });
     });
 
     this.markProcessed(file, prepared.fingerprint, requested);
-    this.appendLog("info", `已写入：${requested.join(" + ")}`, { filePath: file.path, phase: requested.join(" + ") });
     if (requested.includes("tags")) this.scheduleTagCatalogRebuild(700);
     return result;
   }
@@ -2404,7 +1492,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
     const cache = this.app.metadataCache.getFileCache(file);
     const frontmatter = cache && cache.frontmatter;
     const value = frontmatter && frontmatter.AI_tags;
-    return this.normalizeTagList(value);
+    return this.normalizeTagList(value).filter((tag) => this.isValidTagValue(tag));
   }
 
   normalizeTagList(value) {
@@ -2421,7 +1509,8 @@ module.exports = class AiMetadataPlugin extends Plugin {
   }
 
   getFlatComparableTagValue(value) {
-    return String(value ?? "").trim().replace(/^#/, "");
+    const cleaned = String(value ?? "").trim().replace(/^#/, "");
+    return this.isValidTagValue(cleaned) ? cleaned : "";
   }
 
   normalizeTagValue(tag) {
@@ -2429,6 +1518,15 @@ module.exports = class AiMetadataPlugin extends Plugin {
     if (!cleaned) return "";
     const parts = cleaned.split("/").map((part) => part.trim()).filter(Boolean);
     return (parts.length ? parts[parts.length - 1] : cleaned).trim();
+  }
+
+  isValidTagValue(tag) {
+    const value = String(tag || "").trim();
+    if (!value) return false;
+    // 本地硬过滤：仅允许汉字、ASCII 字母/数字、下划线和连字符。
+    // This deliberately rejects punctuation-heavy technical names such as B+树/C++/.NET;
+    // the model must return semantic aliases such as BPlus树/CPlusPlus/DotNet instead.
+    return /^(?=.*[\p{Script=Han}A-Za-z_-])[\p{Script=Han}A-Za-z0-9_-]+$/u.test(value);
   }
 
   scheduleTagCatalogRebuild(delay = 800) {
@@ -2444,11 +1542,11 @@ module.exports = class AiMetadataPlugin extends Plugin {
     const files = this.getNotesFiles();
     for (const file of files) {
       const cache = this.app.metadataCache.getFileCache(file);
-      const fmTags = this.normalizeTagList(cache?.frontmatter?.AI_tags);
+      const fmTags = this.normalizeTagList(cache?.frontmatter?.AI_tags).filter((tag) => this.isValidTagValue(tag));
       const inlineTags = Array.isArray(cache?.tags)
         ? cache.tags
             .map((item) => this.normalizeTagValue(item.tag))
-            .filter(Boolean)
+            .filter((tag) => tag && this.isValidTagValue(tag))
         : [];
       const fileTags = Array.from(new Set([...fmTags, ...inlineTags]));
       for (const tag of fileTags) {
@@ -2464,6 +1562,7 @@ module.exports = class AiMetadataPlugin extends Plugin {
 
   getTagCatalogEntries(limit = 300) {
     return Object.entries(this.state.tagCatalog || {})
+      .filter(([value]) => this.isValidTagValue(value))
       .map(([value, meta]) => ({ value, count: Number(meta?.count || 0) }))
       .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, "zh-CN"))
       .slice(0, limit);
@@ -2474,16 +1573,46 @@ module.exports = class AiMetadataPlugin extends Plugin {
     const lines = String(this.settings.technicalTagCanonicalList || "").split(/\r?\n/);
     for (const line of lines) {
       const value = this.normalizeTagValue(line);
-      if (!value) continue;
+      if (!value || !this.isValidTagValue(value)) continue;
       const key = value.toLocaleLowerCase("en-US");
       if (!map.has(key)) map.set(key, value);
     }
     return map;
   }
 
-  // 说明：原先这里还有 getExistingTagCase() / canonicalizeTagCase() 两级「按 Vault 已有写法或
-  // 技术词规范表改写 AI 标签」的逻辑，已按要求全部移除 —— AI 给什么 tag 就写什么。
-  // 「整理已有 Tag 大小写冲突」这个手动工具仍然保留（它修的是历史数据，不是 AI 刚生成的内容）。
+  getExistingTagCase(value) {
+    const normalized = this.normalizeTagValue(value);
+    if (!normalized) return "";
+    const key = normalized.toLocaleLowerCase("en-US");
+    const technical = this.getTechnicalTagCanonicalMap().get(key) || "";
+    const matches = Object.entries(this.state.tagCatalog || {})
+      .filter(([tag]) => this.isValidTagValue(tag) && tag.toLocaleLowerCase("en-US") === key)
+      .map(([tag, meta]) => ({ value: tag, count: Number(meta?.count || 0) }));
+    if (!matches.length) return "";
+    matches.sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      const aTechnical = technical && a.value === technical ? 1 : 0;
+      const bTechnical = technical && b.value === technical ? 1 : 0;
+      if (aTechnical !== bTechnical) return bTechnical - aTechnical;
+      return a.value.localeCompare(b.value, "zh-CN");
+    });
+    return matches[0].value;
+  }
+
+  canonicalizeTagCase(value) {
+    const normalized = this.normalizeTagValue(value);
+    if (!normalized || this.settings.tagCaseNormalizationEnabled === false) return normalized;
+
+    // 优先级 1：优先沿用当前 Vault 已经形成的 Tag 写法。若存在历史大小写变体，
+    // 使用次数最多者优先；次数并列时，如果技术词标准写法已存在于候选中，则优先标准写法。
+    const existing = this.getExistingTagCase(normalized);
+    if (existing) return existing;
+
+    // 优先级 2：如果 Vault 从未使用过该 Tag，则回退到内置/可编辑的技术词规范表。
+    // 本地 Tag 索引数据不会发送给 AI。
+    const technical = this.getTechnicalTagCanonicalMap().get(normalized.toLocaleLowerCase("en-US"));
+    return technical || normalized;
+  }
 
   async getFrontmatterTagCaseConflicts() {
     const grouped = new Map();
@@ -2589,6 +1718,27 @@ module.exports = class AiMetadataPlugin extends Plugin {
     return `笔记标题：${title}`;
   }
 
+  // 生成前清空本次要重新生成的字段。
+  // 关键：只把值置空，不删除 frontmatter 键 —— 否则 Properties 里的属性行会消失，
+  // ✨ 按钮也随之消失（按钮只注入到已存在的属性行上）。
+  // 数组字段置 []，数值字段置 null，文本字段置 ""，与手动新建空属性的形态一致。
+  async clearFieldsBeforeRun(file, kinds) {
+    if (this.settings.clearFieldsBeforeRunEnabled === false) return;
+    const requested = Array.isArray(kinds) ? kinds : [kinds];
+    if (!requested.length) return;
+
+    await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+      for (const kind of requested) {
+        const key = this.fieldKeyForKind(kind);
+        // 本来就不存在的字段不凭空创建，避免给笔记塞入多余属性行。
+        if (!(key in frontmatter)) continue;
+        if (kind === "tags" || kind === "ai_title") frontmatter[key] = [];
+        else if (kind === "technical_depth") frontmatter[key] = null;
+        else frontmatter[key] = "";
+      }
+    });
+  }
+
   renderHarness(template) {
     return String(template || "")
       .replaceAll("{{summaryShortMaxChars}}", String(this.settings.summaryShortMaxChars))
@@ -2619,58 +1769,100 @@ module.exports = class AiMetadataPlugin extends Plugin {
     return String(body || "");
   }
 
+  normalizeSummaryText(text, maxChars, fallbackMax = 100) {
+    const limit = Math.max(20, Number(maxChars) || fallbackMax);
+    let summary = String(text ?? "")
+      .replace(/^[\"'“”]+|[\"'“”]+$/g, "")
+      .replace(/\s*\n+\s*/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    if (!summary) return "";
+    if (summary.length <= limit) return summary;
+
+    const clipped = summary.slice(0, limit).trimEnd();
+    const sentenceFloor = Math.floor(limit * 0.42);
+    const clauseFloor = Math.floor(limit * 0.68);
+    let sentenceCut = -1;
+    for (const mark of ["。", "！", "？", "；"]) {
+      sentenceCut = Math.max(sentenceCut, clipped.lastIndexOf(mark));
+    }
+    if (sentenceCut >= sentenceFloor) return clipped.slice(0, sentenceCut + 1).trim();
+
+    let clauseCut = -1;
+    for (const mark of ["，", ",", ";", "、"]) {
+      clauseCut = Math.max(clauseCut, clipped.lastIndexOf(mark));
+    }
+    if (clauseCut >= clauseFloor) return clipped.slice(0, clauseCut + 1).trim();
+    return clipped;
+  }
+
   async generateSummaryShort(body, title, context = {}) {
     const summaryBody = this.cleanMarkdownForSummary(body);
-    const harness = `\n\n[Summary Short Harness]\n${this.renderHarness(this.settings.summaryShortHarness)}`;
+    const harness = this.settings.summaryShortHarnessEnabled !== false
+      ? `\n\n[Summary Short Harness]\n${this.renderHarness(this.settings.summaryShortHarness)}`
+      : "";
     const system = `你是 Obsidian 知识库的元数据整理助手。${harness}`;
-    // 提示词里不再硬编码任何输出限制：字符数上限、格式、是否带字段名全部由 Harness 决定。
-    // 这里只保留「本次要生成哪个字段」这一句任务说明，以及正文本身。
+    const shortCharLimit = this.settings.summaryShortMaxCharsEnabled !== false
+      ? this.settings.summaryShortMaxChars
+      : 10000;
     const prompt = [
       this.titlePromptLine(title),
-      "请根据以下正文生成 AI_summary_short。",
+      this.settings.summaryShortMaxCharsEnabled !== false
+        ? `summary_short 最大字符数：${this.settings.summaryShortMaxChars}`
+        : "",
+      "请根据以下正文生成 summary_short。只输出摘要正文，不要输出字段名。",
       "",
       summaryBody,
     ].filter(Boolean).join("\n");
 
     const raw = await this.chat(system, prompt, { ...context, phase: "Summary Short" });
-    // 已按要求移除本地格式处理：不再去引号/换行/多余空格，也不再按字符数截断，模型返回什么就写什么。
-    if (!raw) throw new Error("AI 返回了空 summary_short");
-    return raw;
+    const summary = this.normalizeSummaryText(raw, shortCharLimit, 100);
+    if (!summary) throw new Error("AI 返回了空 summary_short");
+    return summary;
   }
 
   async generateSummaryLong(body, title, context = {}) {
     const summaryBody = this.cleanMarkdownForSummary(body);
-    const harness = `\n\n[Summary Long Harness]\n${this.renderHarness(this.settings.summaryLongHarness)}`;
+    const harness = this.settings.summaryLongHarnessEnabled !== false
+      ? `\n\n[Summary Long Harness]\n${this.renderHarness(this.settings.summaryLongHarness)}`
+      : "";
     const system = `你是 Obsidian 知识库的元数据整理助手。${harness}`;
-    // 同上：不再硬编码字符数上限与输出格式。
+    const longCharLimit = this.settings.summaryLongMaxCharsEnabled !== false
+      ? this.settings.summaryLongMaxChars
+      : 10000;
     const prompt = [
       this.titlePromptLine(title),
-      "请根据以下正文生成 AI_summary_long。",
+      this.settings.summaryLongMaxCharsEnabled !== false
+        ? `summary_long 最大字符数：${this.settings.summaryLongMaxChars}`
+        : "",
+      "请根据以下正文生成 summary_long。只输出摘要正文，不要输出字段名。",
       "",
       summaryBody,
     ].filter(Boolean).join("\n");
 
     const raw = await this.chat(system, prompt, { ...context, phase: "Summary Long" });
-    // 已按要求移除本地格式处理：不再去引号/换行/多余空格，也不再按字符数截断，模型返回什么就写什么。
-    if (!raw) throw new Error("AI 返回了空 summary_long");
-    return raw;
+    const summary = this.normalizeSummaryText(raw, longCharLimit, 300);
+    if (!summary) throw new Error("AI 返回了空 summary_long");
+    return summary;
   }
 
   async generateTags(body, title, currentTags, context = {}) {
-    const harness = `\n\n可编辑 Tags Harness：\n${this.renderHarness(this.settings.tagsHarness)}`;
-    // 不再注入 TAG_VALUE_SAFETY_PROTOCOL：那是硬编码的标签字符限制，
-    // 现在标签的一切规则（数量、字符、权重、层级前缀）都由上面这段 Harness 决定。
+    const maxTags = Math.max(1, Number(this.settings.maxTags) || 7);
+    const harness = this.settings.tagsHarnessEnabled
+      ? `\n\n可编辑 Tags Harness：\n${this.renderHarness(this.settings.tagsHarness)}`
+      : "";
     const system = [
       "你是 Obsidian 知识库标签整理助手。",
+      "[标签合法性协议｜始终生效]",
+      TAG_VALUE_SAFETY_PROTOCOL,
       harness,
     ].filter(Boolean).join("\n");
-    // 同样不再硬编码：标签数量上限、JSON 结构（{"value":..,"weight":..}）、
-    // 以及「插件会在本地过滤/去重/排序」这类说明。模型输出成什么样，本地就尽量照收，
-    // 解析失败时再由下面的重试与原样落库兜底。
     const basePrompt = [
       this.titlePromptLine(title),
       `当前 tags（已转为 value）：${currentTags.length ? currentTags.join("、") : "无"}`,
-      "请根据以下正文生成 AI_tags。",
+      `请生成最多 ${maxTags} 个互不重复、合法的标签，并按 Harness 的技术优先规则给 weight；优先质量，不要为了凑满数量输出泛化或低质量标签。`,
+      "首选返回 JSON 对象 {\"tags\":[...]}；tags 每项必须是 {\"value\":\"标签\",\"weight\":0.0}，weight 使用 0~1。插件也兼容直接返回顶层 tags 数组。不要返回解释、Markdown 或代码块。",
+      `插件会在本地过滤非法 value、去重并按 weight 排序，最终最多保留 ${maxTags} 个；少于 ${maxTags} 个也属于有效结果。`,
       "",
       "笔记正文：",
       body,
@@ -2678,45 +1870,49 @@ module.exports = class AiMetadataPlugin extends Plugin {
 
     const rawAttempts = [];
     for (let attempt = 1; attempt <= 2; attempt += 1) {
-      const retryHint = attempt === 1 ? "" : "\n\n上一次的输出无法解析出任何结果，请重新输出一次。";
+      const retryHint = attempt === 1 ? "" : "\n\n上一次结构化输出未通过解析或校验。这是自动重试，只返回完全合法的 JSON 对象，不要添加任何其他文字。";
       const text = await this.chat(
         system,
         `${basePrompt}${retryHint}`,
-        { ...context, phase: attempt === 1 ? "Tags" : "Tags（重试 1/1）" },
+        { ...context, phase: attempt === 1 ? "Tags" : "Tags（结构重试 1/1）" },
+        { jsonMode: true },
       );
       rawAttempts.push(text);
       try {
         const parsed = this.parseTagsEnvelope(text);
-        return this.collectTagValues(parsed.tags);
+        return this.rankWeightedTags(parsed.tags);
       } catch (error) {
         const structured = this.asStructuredOutputError(error, text, rawAttempts);
         if (attempt >= 2) throw structured;
         console.warn(`[xyblue135 私人·AI 元数据] Tags 结构化输出失败，自动重试 1 次：${context.filePath || title}`, structured);
-        this.appendLog("warn", `Tags 结构化输出失败，自动重试 1 次：${structured.message}`, {
-          filePath: context.filePath || title,
-          errorType: structured.code || "STRUCTURED_OUTPUT",
-          raw: structured.rawOutput,
-        });
       }
     }
     throw new StructuredOutputError("Tags 结构化输出失败", rawAttempts.join("\n\n"));
   }
 
   async generateTechnicalDepth(body, title, context = {}) {
-    // 不再硬编码「必须返回 JSON」：你的 technicalDepthHarness 要求只输出整数分，
-    // 系统提示词里再要求 JSON 就会互相打架。这里只保留角色说明，输出形态完全交给 Harness。
-    const system = "你是技术内容评审员，请严格执行用户提供的 technical_depth 评分标准。";
+    const system = this.settings.technicalDepthHarnessEnabled !== false
+      ? "请严格执行用户提供的 technical_depth 评分标准，并只返回评分 JSON。"
+      : "你是技术内容评审员。请对文章技术深度进行 0～100 整数评分，并返回包含 technical_depth、五个分项和 reason 的 JSON；五个分项之和必须等于总分。";
     // technical_depth 的评分标准（Harness）里没有标题占位符，这里统一补上标题行，
     // 让「喂入文章标题」这个全局开关对 7 个字段都生效。
-    const basePrompt = [this.titlePromptLine(title), this.renderTechnicalDepthPrompt(body)].filter(Boolean).join("\n");
+    const basePrompt = this.settings.technicalDepthHarnessEnabled !== false
+      ? [this.titlePromptLine(title), this.renderTechnicalDepthPrompt(body)].filter(Boolean).join("\n")
+      : [
+        this.titlePromptLine(title),
+        "只返回 JSON：{\"technical_depth\":68,\"mechanism_depth\":20,\"engineering_depth\":17,\"analysis_validation\":13,\"system_complexity\":10,\"prerequisite_density\":8,\"reason\":\"一句话原因\"}",
+        "文章全文：",
+        body,
+      ].filter(Boolean).join("\n");
 
     const rawAttempts = [];
     for (let attempt = 1; attempt <= 2; attempt += 1) {
-      const retryHint = attempt === 1 ? "" : "\n\n上一次的输出无法解析出任何结果，请重新输出一次。";
+      const retryHint = attempt === 1 ? "" : "\n\n上一次输出未通过 technical_depth 数值、分项范围或分项求和校验。这是自动重试，只返回完全合法的 JSON 对象。";
       const raw = await this.chat(
         system,
         `${basePrompt}${retryHint}`,
-        { ...context, phase: attempt === 1 ? "Technical Depth" : "Technical Depth（重试 1/1）" },
+        { ...context, phase: attempt === 1 ? "Technical Depth" : "Technical Depth（结构重试 1/1）" },
+        { jsonMode: true },
       );
       rawAttempts.push(raw);
       try {
@@ -2725,11 +1921,6 @@ module.exports = class AiMetadataPlugin extends Plugin {
         const structured = this.asStructuredOutputError(error, raw, rawAttempts);
         if (attempt >= 2) throw structured;
         console.warn(`[xyblue135 私人·AI 元数据] Technical Depth 结构化输出失败，自动重试 1 次：${context.filePath || title}`, structured);
-        this.appendLog("warn", `Technical Depth 结构化输出失败，自动重试 1 次：${structured.message}`, {
-          filePath: context.filePath || title,
-          errorType: structured.code || "STRUCTURED_OUTPUT",
-          raw: structured.rawOutput,
-        });
       }
     }
     throw new StructuredOutputError("Technical Depth 结构化输出失败", rawAttempts.join("\n\n"));
@@ -2737,26 +1928,39 @@ module.exports = class AiMetadataPlugin extends Plugin {
 
   async generateQa(body, title, context = {}) {
     const qaBody = this.cleanMarkdownForSummary(body);
-    const harness = `\n\n[QA Harness]\n${this.renderHarness(this.settings.qaHarness)}`;
+    const harness = this.settings.qaHarnessEnabled !== false
+      ? `\n\n[QA Harness]\n${this.renderHarness(this.settings.qaHarness)}`
+      : "";
     const system = `你是 Obsidian 知识库的面试出题助手。${harness}`;
-    // 不再硬编码「Q: 题目 / A: 答案」的输出格式与题目数量 —— 你的 qaHarness 用的是
-    // 「专家: / 空行 / 答:」三段结构，硬编码的 Q/A 说明会直接和它打架。
     const prompt = [
       this.titlePromptLine(title),
-      "请根据以下正文生成 AI_qa。",
+      this.settings.qaMaxQuestionsEnabled === true
+        ? `请根据以下正文生成 ${this.settings.qaMaxQuestions} 道面试题。`
+        : "",
+      "只输出 Q/A 交替的纯文本，格式：Q: 题目 / A: 答案，每道题之间空一行；不要 Markdown、代码块或额外解释。",
       "",
       qaBody,
     ].filter(Boolean).join("\n");
 
     const raw = await this.chat(system, prompt, { ...context, phase: "QA" });
-    // 已按要求移除本地格式处理：不再去 ``` 围栏、不再压缩连续空行，模型返回什么就写什么。
-    if (!raw) throw new Error("AI 返回了空 qa");
-    return raw;
+    const qa = this.normalizeQaText(raw);
+    if (!qa) throw new Error("AI 返回了空 qa");
+    return qa;
+  }
+
+  normalizeQaText(text) {
+    return String(text ?? "")
+      .replace(/\r\n/g, "\n")
+      .replace(/^```[\s\S]*?\n?|```$/g, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   }
 
   async generateTake(body, title, context = {}) {
     const takeBody = this.cleanMarkdownForSummary(body);
-    const harness = "\n\n[Take Harness]\n" + this.renderHarness(this.settings.takeHarness);
+    const harness = this.settings.takeHarnessEnabled !== false
+      ? "\n\n[Take Harness]\n" + this.renderHarness(this.settings.takeHarness)
+      : "";
     const system = "你是 Obsidian 知识库的客观评价助手。" + harness;
     const prompt = [
       this.titlePromptLine(title),
@@ -2764,89 +1968,121 @@ module.exports = class AiMetadataPlugin extends Plugin {
     ].filter(Boolean).join("\n");
 
     const raw = await this.chat(system, prompt, { ...context, phase: "Take" });
-    // 已按要求移除本地格式处理：不再去 ``` 围栏、不再压缩连续空行，模型返回什么就写什么。
-    if (!raw) throw new Error("AI 返回了空 take");
-    return raw;
+    const take = this.normalizeQaText(raw);
+    if (!take) throw new Error("AI 返回了空 take");
+    return take;
   }
 
   async generateTitle(body, title, context = {}) {
     const titleBody = this.cleanMarkdownForSummary(body);
-    const harness = `\n\n[AI Title Harness]\n${this.renderHarness(this.settings.aiTitleHarness)}`;
+    const harness = this.settings.aiTitleHarnessEnabled !== false
+      ? `\n\n[AI Title Harness]\n${this.renderHarness(this.settings.aiTitleHarness)}`
+      : "";
     const system = `你是 Obsidian 知识库的标题生成助手。${harness}`;
-    // 不再硬编码「N 个标题」与「每行一个纯文本标题」—— 你的 aiTitleHarness 要求的是
-    // 3 个《》包裹的标题、YAML 形式，硬编码说明会把它带偏。
     const prompt = [
       this.titlePromptLine(title),
-      "请根据以下正文生成 AI_title。",
+      this.settings.aiTitleMaxItemsEnabled !== false
+        ? `请根据以下正文生成 ${this.settings.aiTitleMaxItems} 个参考性文章标题。`
+        : "请根据以下正文生成参考性文章标题。",
+      "只输出纯文本标题列表，每行一个标题，不要序号、Markdown 列表符号、代码块或额外解释。",
       "",
       titleBody,
     ].filter(Boolean).join("\n");
 
     const raw = await this.chat(system, prompt, { ...context, phase: "TITLE" });
-    return this.extractTitleValues(raw);
+    const titles = this.normalizeTitle(raw);
+    if (!titles.length) throw new Error("AI 返回了空 AI_title");
+    return titles;
   }
 
-  // AI_title 在 frontmatter 里必须是 YAML 列表，所以「把模型输出变成数组」这一步省不掉。
-  // 除此之外代码不做任何格式处理：不剥 YAML 根键、不剥 "- "、不剥代码围栏、不删空行、
-  // 不删序号、不去引号、不去行尾逗号、不做数量上限。
-  // 模型给什么，数组里就是什么；格式是否合格交给「格式校验」的正则去警告，不再由代码猜。
-  extractTitleValues(text) {
-    const trimmed = String(text ?? "").trim();
-    if (!trimmed) throw new Error("AI 返回了空 AI_title");
-    // 唯一的结构解包：模型若返回 JSON 数组，取数组本身（数组项就是内容，不做任何改动）
-    if (trimmed.startsWith("[")) {
-      try {
-        const value = JSON.parse(trimmed);
-        if (Array.isArray(value)) return value.map((item) => String(item ?? ""));
-      } catch (_) {
-        // 不是合法 JSON 数组，按行拆
-      }
-    }
-    return trimmed.split(/\r?\n/);
+  normalizeTitle(text) {
+    return String(text ?? "")
+      .replace(/\r\n/g, "\n")
+      .replace(/^```[\s\S]*?\n?|```$/g, "")
+      .split("\n")
+      .map((line) => line.replace(/^[\s]*[-*•\d.、)）]+[\s]*/, "").trim())
+      .filter((line) => line.length > 0)
+      .slice(0, this.settings.aiTitleMaxItemsEnabled !== false
+        ? Math.max(1, Number(this.settings.aiTitleMaxItems) || 5)
+        : 50);
   }
 
-  // 不做任何格式校验，只负责「取得一个可写入的值」，且绝不返回 undefined。
-  // technicalDepthHarness 当前要求「仅输出最终得分的整数数字」，所以：
-  //   1) 纯数字（68）→ { technical_depth: 68 }
-  //   2) JSON 对象（含 technical_depth 或任意字段）→ 原样返回
-  //   3) 其它任何内容 → 原样放进 technical_depth 字符串，绝不丢弃、绝不抛错
-  // 第 3 条很关键：上层会把 technical_depth 写进 frontmatter，一旦是 undefined，
-  // Obsidian 的 YAML 序列化会省略该键，等于把 AI_technical_depth 属性行整个删掉。
   parseTechnicalDepthEnvelope(text, label = "Technical Depth") {
-    const trimmed = String(text ?? "").trim();
-    if (trimmed !== "" && Number.isFinite(Number(trimmed))) {
-      return { technical_depth: Number(trimmed) };
-    }
-    try {
-      const value = this.parseJsonValueWithRepair(text, label);
-      if (value && typeof value === "object" && !Array.isArray(value)) {
-        // 有 technical_depth 就用它；没有就把模型原始输出写进去（原样保留，交给手动校验发现），
-        // 保证本方法永远不会返回 technical_depth = undefined。
-        if (value.technical_depth !== undefined) return value;
-        return { technical_depth: trimmed };
-      }
-      if (typeof value === "number") return { technical_depth: value };
-    } catch (_) {
-      // 落到下面的原样字符串
-    }
-    return { technical_depth: trimmed };
+    const value = this.parseJsonObjectWithRepair(text, label);
+    return this.validateTechnicalDepthResult(value, text, label);
   }
 
-  // 已按要求移除全部标签改写：不再去开头的 #、不再去层级前缀、不再截断层级标签、
-  // 不再统一大小写、不再套用技术词规范表。AI 返回什么 tag，就原样写进 AI_tags。
-  // 格式是否合格交给「格式校验」的正则去警告，代码不再做任何猜测。
-  // 仅保留一条机械处理：空字符串/纯空白不是内容，写入前丢掉；全空则报错，避免把已有 tags 清空。
-  collectTagValues(candidates) {
-    const values = [];
-    for (const item of (Array.isArray(candidates) ? candidates : [])) {
-      const rawValue = typeof item === "string"
-        ? item
-        : String((item || {}).value ?? (item || {}).tag ?? (item || {}).name ?? "");
-      if (!rawValue.trim()) continue;
-      values.push(rawValue);
+  validateTechnicalDepthResult(value, rawText = "", label = "Technical Depth") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new StructuredOutputError(`${label} 必须返回 JSON 对象`, rawText);
     }
-    if (!values.length) throw new StructuredOutputError("AI 没有返回任何可用 tag");
-    return values.map((value) => ({ value }));
+    const ranges = {
+      technical_depth: [0, 100],
+      mechanism_depth: [0, 28],
+      engineering_depth: [0, 24],
+      analysis_validation: [0, 19],
+      system_complexity: [0, 17],
+      prerequisite_density: [0, 12],
+    };
+    const out = {};
+    for (const [key, [min, max]] of Object.entries(ranges)) {
+      const numeric = Number(value[key]);
+      if (!Number.isInteger(numeric) || numeric < min || numeric > max) {
+        throw new StructuredOutputError(`${label} 的 ${key} 必须是 ${min}～${max} 的整数`, rawText);
+      }
+      out[key] = numeric;
+    }
+    const sum = out.mechanism_depth + out.engineering_depth + out.analysis_validation + out.system_complexity + out.prerequisite_density;
+    if (sum !== out.technical_depth) {
+      throw new StructuredOutputError(`${label} 五个维度之和 ${sum} 不等于 technical_depth ${out.technical_depth}`, rawText);
+    }
+    out.reason = String(value.reason || "").replace(/\s+/g, " ").trim().slice(0, 80);
+    if (!out.reason) throw new StructuredOutputError(`${label} 缺少 reason`, rawText);
+    return out;
+  }
+
+  rankWeightedTags(candidates) {
+    const maxTags = Math.max(1, Number(this.settings.maxTags) || 7);
+    const byValue = new Map();
+    const rejected = [];
+    (Array.isArray(candidates) ? candidates : []).forEach((item, index) => {
+      const normalizedItem = typeof item === "string"
+        ? { value: item, weight: Math.max(0, 1 - index * 0.01) }
+        : (item || {});
+      const rawValue = normalizedItem.value ?? normalizedItem.tag ?? normalizedItem.name ?? "";
+      const rawNormalized = this.normalizeTagValue(rawValue);
+      if (!rawNormalized) return;
+      if (!this.isValidTagValue(rawNormalized)) {
+        rejected.push(rawNormalized);
+        return;
+      }
+      const value = this.canonicalizeTagCase(rawNormalized);
+      const numericWeight = Number(normalizedItem.weight ?? normalizedItem.score ?? normalizedItem.relevance);
+      const weight = Number.isFinite(numericWeight) ? numericWeight : Math.max(0, 1 - index * 0.01);
+      const dedupKey = value.toLocaleLowerCase("en-US");
+      const existing = byValue.get(dedupKey);
+      if (!existing || weight > existing.weight) byValue.set(dedupKey, { value, weight });
+    });
+
+    if (rejected.length) {
+      console.warn("[xyblue135 私人·AI 元数据] 已过滤非法 tag value：", Array.from(new Set(rejected)));
+    }
+
+    const ranked = Array.from(byValue.values())
+      .sort((a, b) => b.weight - a.weight || a.value.localeCompare(b.value, "zh-CN"))
+      .slice(0, maxTags);
+    // maxTags 是上限，不是必须凑满的数量。本地过滤/去重后少于 maxTags 是允许的；
+    // 只有“一个合法 Tag 都没有”才判失败，避免异常模型输出悄悄清空已有 tags。
+    if (ranked.length === 0) {
+      const suffix = rejected.length
+        ? `；已过滤非法标签：${Array.from(new Set(rejected)).slice(0, 8).join("、")}`
+        : "";
+      throw new StructuredOutputError(`AI 没有返回任何可用 tag${suffix}`);
+    }
+    if (ranked.length < maxTags) {
+      console.info(`[xyblue135 私人·AI 元数据] 合法唯一 tags 为 ${ranked.length}/${maxTags}，按实际数量写入。`);
+    }
+    return ranked;
   }
 
   stripJsonFences(text) {
@@ -3042,24 +2278,28 @@ module.exports = class AiMetadataPlugin extends Plugin {
     return { value: null, key: null };
   }
 
-  // AI_tags 同样是「必须变成列表」的字段，这里只做这一步，不做任何剥离或改写：
-  // 不剥 "- " 列表符号、不剥引号、不删空行、不处理 JSONL、不做字符白名单、不做数量上限。
-  // 模型返回 JSON（对象里含 tags 数组，或顶层数组）时取数组本身；否则按行拆。
-  // 格式是否合格交给「格式校验」的正则，不再由代码猜。
   parseTagsEnvelope(text) {
-    const trimmed = String(text ?? "").trim();
-    if (!trimmed) throw new StructuredOutputError("Tags 请求没有返回任何内容", text);
-    try {
-      const value = this.parseJsonValueWithRepair(trimmed, "Tags 请求");
-      if (Array.isArray(value)) return { tags: value };
-      if (value && typeof value === "object") {
-        const tagsField = this.firstArrayField(value, ["tags", "weighted_tags", "weightedTags", "tag_list", "tagList"]);
-        if (tagsField.value !== null) return { tags: tagsField.value };
-      }
-    } catch (_) {
-      // 不是 JSON，按行拆
+    const value = this.parseJsonValueWithRepair(text, "Tags 请求");
+
+    // 兼容路径：部分 OpenAI 兼容后端会忽略 response_format=json_object，直接返回 Tag 数组。
+    // 顶层数组仍属于合法结构化输出，因此直接接受，不浪费唯一一次自动重试。
+    if (Array.isArray(value)) {
+      console.info(`[xyblue135 私人·AI 元数据] Tags 请求返回顶层数组，已按 { tags: [...] } 兼容处理。`);
+      return { tags: value };
     }
-    return { tags: trimmed.split(/\r?\n/) };
+
+    if (!value || typeof value !== "object") {
+      throw new StructuredOutputError("Tags 请求返回格式既不是 JSON 对象也不是数组", text);
+    }
+
+    const tagsField = this.firstArrayField(value, ["tags", "weighted_tags", "weightedTags", "tag_list", "tagList"]);
+    if (tagsField.value === null) {
+      throw new StructuredOutputError("Tags 请求缺少 tags 数组（兼容 tags / weighted_tags / weightedTags / tag_list / tagList）", text);
+    }
+    if (tagsField.key !== "tags") {
+      console.info(`[xyblue135 私人·AI 元数据] Tags 请求字段别名已归一化：${tagsField.key} → tags。`);
+    }
+    return { tags: tagsField.value };
   }
 
   asStructuredOutputError(error, rawOutput, attempts = []) {
@@ -3152,13 +2392,10 @@ module.exports = class AiMetadataPlugin extends Plugin {
     });
   }
 
-  async chat(system, user, context = {}) {
+  async chat(system, user, context = {}, requestOptions = {}) {
     return this.enqueueApiRequest(async () => {
       const baseUrl = String(this.settings.baseUrl || DEFAULT_SETTINGS.baseUrl).replace(/\/+$/, "");
       const timeoutMs = Math.max(1, Number(this.settings.requestTimeoutSeconds) || 180) * 1000;
-      // 不再硬编码 response_format=json_object：那是在 API 层强制模型只能输出 JSON，
-      // 会与「只输出整数分」「输出 YAML」「逐行文本」等 Harness 直接冲突。
-      // 输出形态完全交给各字段的 Harness，本地解析按最宽容的方式兜底。
       const payload = {
         model: String(this.settings.model || "auto").trim() || "auto",
         messages: [
@@ -3167,6 +2404,10 @@ module.exports = class AiMetadataPlugin extends Plugin {
         ],
         temperature: 0.2,
       };
+      if (requestOptions.jsonMode === true && this.settings.structuredJsonModeEnabled !== false) {
+        // OpenAI 兼容 JSON 模式。Ollama /v1/chat/completions 支持 JSON mode；字段结构、合法值、权重与最大 Tag 数等语义约束仍由本地再次校验。
+        payload.response_format = { type: "json_object" };
+      }
       const response = await this.requestJsonWithHardTimeout(`${baseUrl}/chat/completions`, payload, timeoutMs, context.abortSignal || null);
       this.ensureTaskActive(context.abortSignal);
 
@@ -3185,32 +2426,64 @@ module.exports = class AiMetadataPlugin extends Plugin {
     }, context);
   }
 
-  // 完成度 = 「键存在 且 有内容」。
-  // 注意这与「格式校验」是两件事：这里只判断有没有内容，不做任何格式判断。
-  // 之所以把「值为空」也算未完成，是因为待更新面板的职责就是「补充空数据」：
-  // 库里存在大量 AI_title: "" / AI_take: "" / AI_technical_depth: 这类空壳，
-  // 如果只判断键是否存在，它们会被误判为已完成、在面板上永远看不到。
+  hasNonEmptyFrontmatterField(file, key) {
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter || {};
+    const value = fm[key];
+    if (value === null || value === undefined) return false;
+    if (typeof value === "string") return value.trim().length > 0;
+    return String(value).trim().length > 0;
+  }
+
+  hasNonEmptySummaryShort(file) {
+    return this.hasNonEmptyFrontmatterField(file, "AI_summary_short");
+  }
+
+  hasNonEmptySummaryLong(file) {
+    return this.hasNonEmptyFrontmatterField(file, "AI_summary_long");
+  }
+
+  hasNonEmptyTags(file) {
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter || {};
+    const value = fm.AI_tags;
+    if (Array.isArray(value)) return value.some((item) => String(item ?? "").trim().length > 0);
+    if (value === null || value === undefined) return false;
+    return String(value).trim().length > 0;
+  }
+
+  hasValidTechnicalDepth(file) {
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter || {};
+    const numeric = Number(fm.AI_technical_depth);
+    return Number.isInteger(numeric) && numeric >= 0 && numeric <= 100;
+  }
+
+  hasNonEmptyQa(file) {
+    return this.hasNonEmptyFrontmatterField(file, "AI_qa");
+  }
+
+  hasNonEmptyTake(file) {
+    return this.hasNonEmptyFrontmatterField(file, "AI_take");
+  }
+
+  hasNonEmptyTitle(file) {
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter || {};
+    const value = fm.AI_title;
+    if (Array.isArray(value)) return value.some((item) => String(item ?? "").trim().length > 0);
+    if (value === null || value === undefined) return false;
+    return String(value).trim().length > 0;
+  }
+
+  // 内容指纹已下线（contentFingerprintEnabled 在 onload 恒为 false）：完成度一律按 Properties 内容存在性判断。
+  // 参数 fingerprint 保留以兼容既有调用点签名。
   getMetadataCompletion(file, fingerprint) {
     void fingerprint;
-    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter || {};
-    const hasKey = (key) => Object.prototype.hasOwnProperty.call(fm, key);
-    const hasContent = (key) => {
-      if (!hasKey(key)) return false;
-      const value = fm[key];
-      if (Array.isArray(value)) return value.some((item) => String(item ?? "").trim() !== "");
-      if (value === null || value === undefined) return false;
-      if (typeof value === "string") return value.trim() !== "";
-      // 数字（含 0 分）与布尔都算有内容
-      return true;
-    };
     return {
-      titleDone: hasContent("AI_title"),
-      summaryShortDone: hasContent("AI_summary_short"),
-      summaryLongDone: hasContent("AI_summary_long"),
-      tagsDone: hasContent("AI_tags"),
-      technicalDepthDone: hasContent("AI_technical_depth"),
-      takeDone: hasContent("AI_take"),
-      qaDone: hasContent("AI_qa"),
+      titleDone: this.hasNonEmptyTitle(file),
+      summaryShortDone: this.hasNonEmptySummaryShort(file),
+      summaryLongDone: this.hasNonEmptySummaryLong(file),
+      tagsDone: this.hasNonEmptyTags(file),
+      technicalDepthDone: this.hasValidTechnicalDepth(file),
+      takeDone: this.hasNonEmptyTake(file),
+      qaDone: this.hasNonEmptyQa(file),
     };
   }
 
@@ -3434,6 +2707,116 @@ module.exports = class AiMetadataPlugin extends Plugin {
     new PendingNotesDashboardModal(this.app, this).open();
   }
 
+  async exportWhitelistFolder() {
+    const root = this.normalizeWhitelistFolder();
+    const exportRoot = "AI元数据导出副本";
+    const files = this.getNotesFiles().filter((file) => this.getMetadataStatus(file) === "done");
+
+    if (!files.length) {
+      new Notice("xyblue135 私人·AI 元数据：" + root + " 目录下没有 Markdown 文件");
+      return;
+    }
+
+    const previous = this.app.vault.getAbstractFileByPath(exportRoot);
+    if (previous) await this.app.vault.delete(previous);
+
+    const ensureFolder = async (folder) => {
+      if (!folder) return;
+      if (this.app.vault.getAbstractFileByPath(folder)) return;
+      const slash = folder.lastIndexOf("/");
+      if (slash > 0) await ensureFolder(folder.slice(0, slash));
+      try { await this.app.vault.createFolder(folder); } catch (_) {}
+    };
+
+    let copied = 0;
+    for (const file of files) {
+      const rel = file.path.startsWith(root + "/") ? file.path.slice(root.length + 1) : file.path;
+      const target = exportRoot + "/" + rel;
+      await ensureFolder(target.slice(0, target.lastIndexOf("/")));
+      const content = await this.app.vault.read(file);
+      await this.app.vault.create(target, content);
+      copied += 1;
+    }
+
+    const depthHarness = this.renderHarness(this.settings.technicalDepthHarness || DEFAULT_TECHNICAL_DEPTH_HARNESS);
+    const depthOutputIndex = depthHarness.indexOf("## 输出格式");
+    const depthRubric = (depthOutputIndex >= 0 ? depthHarness.slice(0, depthOutputIndex) : depthHarness.replace("{{ARTICLE}}", "")).trim();
+
+    const prompt = [
+      "# AI 元数据补全提示词",
+      "",
+      "> 本文件夹是「" + root + "」白名单目录的副本，含多篇 Markdown 笔记。",
+      "> 把这段提示词连同整个文件夹里的笔记一起交给支持附件的网页版 AI，让它逐篇补全元数据。",
+      "> 网页版 AI 最终会输出完整文档（含 frontmatter），因此无需严格 JSON 校验，输出宽松即可。",
+      "",
+      "---",
+      "",
+      "你是精通技术写作与知识管理的中文 AI 助手。本文件夹里有多个 Markdown 笔记，请逐篇阅读正文，为每篇笔记补全一组元数据，并以 YAML frontmatter 直接写在该笔记文件顶部（不要改动正文、不要输出分析过程、不要用严格 JSON 包装）。",
+      "",
+      "共 7 个字段，顺序固定：AI_title → AI_tags → AI_summary_short → AI_summary_long → AI_technical_depth → AI_take → AI_qa。",
+      "",
+      "========== 字段 1：AI_title（参考标题） ==========",
+      // 这里刻意不加 "|| 默认值"：导出的提示词必须与真正生成时使用的一致，
+      // 用户把某个 Prompt 清空时，导出结果也应保持清空，而不是显示默认值。
+      this.renderHarness(this.settings.aiTitleHarness),
+      "",
+      "========== 字段 2：AI_tags（标签） ==========",
+      this.renderHarness(this.settings.tagsHarness),
+      "",
+      TAG_VALUE_SAFETY_PROTOCOL,
+      "",
+      "========== 字段 3：AI_summary_short（短摘要） ==========",
+      this.renderHarness(this.settings.summaryShortHarness),
+      "",
+      "========== 字段 4：AI_summary_long（长摘要） ==========",
+      this.renderHarness(this.settings.summaryLongHarness),
+      "",
+      "========== 字段 5：AI_technical_depth（技术深度） ==========",
+      depthRubric,
+      "",
+      "该字段最终只输出一个 0～100 的整数。",
+      "",
+      "========== 字段 6：AI_take（客观评价） ==========",
+      this.renderHarness(this.settings.takeHarness),
+      "",
+      "========== 字段 7：AI_qa（面试问答） ==========",
+      this.renderHarness(this.settings.qaHarness),
+      "",
+      "========== 输出格式（宽松） ==========",
+      "",
+      "每篇笔记以 YAML frontmatter 写在顶部，示例：",
+      "",
+      "---",
+      "AI_title:",
+      "  - 标题一",
+      "  - 标题二",
+      "  - 标题三",
+      "  - 标题四",
+      "  - 标题五",
+      "AI_tags:",
+      "  - tag-a",
+      "  - tag-b",
+      "AI_summary_short: 一句话短摘要",
+      "AI_summary_long: 详细摘要，可多句。",
+      "AI_technical_depth: 60",
+      "AI_take: 一段简短客观评价",
+      "AI_qa: |",
+      "  Q: 问题一",
+      "  A: 回答一",
+      "  Q: 问题二",
+      "  A: 回答二",
+      "---",
+      "",
+      "说明：最终以完整文档（附件 / 文本）形式整体输出即可，字段内容宽松、可读即可，无需严格 JSON、无需通过程序校验。",
+    ].join("\n");
+
+    await this.app.vault.create(exportRoot + "/_AI补全提示词.md", prompt);
+
+    new Notice("xyblue135 私人·AI 元数据：已导出 " + copied + " 篇 → " + exportRoot + "/");
+    const promptFile = this.app.vault.getAbstractFileByPath(exportRoot + "/_AI补全提示词.md");
+    if (promptFile instanceof TFile) await this.app.workspace.getLeaf(false).openFile(promptFile);
+  }
+
   // 把 frontmatter 里的值整理成单元格文本。
   // 数组（AI_title / AI_tags）逐项换行；AI_qa 本身是多行块标量，原样保留换行。
   csvCellValue(value) {
@@ -3528,20 +2911,6 @@ module.exports = class AiMetadataPlugin extends Plugin {
       if (showNotice) new Notice("xyblue135 私人·AI 元数据：API Key 为空，无法重试");
       return { success: false, message: "API Key 为空" };
     }
-    // 与批量识别保持一致：开启 status 校验时，只有 status: done 的文章才能操作。
-    // （之前这里没有检查，导致 undone 的文章也能被这个按钮处理。）
-    if (!this.isRecognitionEligible(file)) {
-      const status = this.getMetadataStatus(file) || "未设置";
-      if (showNotice) new Notice(`xyblue135 私人·AI 元数据：${file.basename} 的 status 为 ${status}，按规则只处理 status: done 的文章`, 7000);
-      return { success: false, skipped: true, message: `status 不是 done（${status}）` };
-    }
-    // 只补「键不存在」的字段，绝不覆盖已有内容（之前这里调用 generateAllForFile，
-    // 会把 7 个字段全部重新生成一遍）。
-    const pendingKinds = this.getPendingKinds(file);
-    if (!pendingKinds.length) {
-      if (showNotice) new Notice(`xyblue135 私人·AI 元数据：${file.basename} 的 7 项均已存在，本次不做任何改动`);
-      return { success: false, skipped: true, message: "没有缺失字段" };
-    }
 
     if (this.autoTimeoutId !== null) {
       window.clearTimeout(this.autoTimeoutId);
@@ -3552,12 +2921,10 @@ module.exports = class AiMetadataPlugin extends Plugin {
     this.cycleMode = "manual-single-retry";
     this.fileBusy.add(file.path);
     try {
-      await this.generateSelectedForFile(file, pendingKinds, "manual-retry", { index: 1, total: 1 }, {
-        respectStatusFilter: this.settings.statusDoneOnlyEnabled === true,
-      });
+      await this.generateAllForFile(file, "manual-retry", { index: 1, total: 1 });
       await this.saveAllData();
-      if (showNotice) new Notice(`xyblue135 私人·AI 元数据：已补全 ${pendingKinds.length} 项：${file.basename}`);
-      return { success: true, message: "补全成功" };
+      if (showNotice) new Notice(`xyblue135 私人·AI 元数据：重试成功：${file.basename}`);
+      return { success: true, message: "重试成功" };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const record = this.state.files[file.path] || {};
@@ -3584,11 +2951,6 @@ module.exports = class AiMetadataPlugin extends Plugin {
       record.lastRawModelOutput = error && error.rawOutput ? String(error.rawOutput).slice(0, 16000) : "";
       this.state.files[file.path] = record;
       await this.saveAllData();
-      this.appendLog("error", message, {
-        filePath: file.path,
-        errorType: record.lastErrorType,
-        raw: record.lastRawModelOutput,
-      });
       if (showNotice) new Notice(`xyblue135 私人·AI 元数据：重试仍失败：${message}`, 7000);
       return { success: false, message, rawOutput: record.lastRawModelOutput };
     } finally {
@@ -3803,11 +3165,6 @@ module.exports = class AiMetadataPlugin extends Plugin {
             failedFiles.push({ path: recordPath, message, rawOutput: record.lastRawModelOutput, errorType: record.lastErrorType });
             if (typeof onProgress === "function") onProgress({ phase: "error", folder, filePath: recordPath, message, ...progress });
             this.setRuntimeStatus("error", { filePath: recordPath, progress, message });
-            this.appendLog("error", message, {
-              filePath: recordPath,
-              errorType: record.lastErrorType,
-              raw: record.lastRawModelOutput,
-            });
             console.warn(`xyblue135 私人·AI 元数据 folder sync failed: ${recordPath}`, error);
           }
           this.state.files[recordPath] = record;
@@ -3998,11 +3355,10 @@ class AiMetadataSettingTab extends PluginSettingTab {
     super(app, plugin);
     this.plugin = plugin;
     this.activeGroup = "api";
-    this.groupOrder = ["api", "directory", "logs", "ai_title", "tags", "summary_short", "summary_long", "technical_depth", "take", "qa"];
+    this.groupOrder = ["api", "directory", "ai_title", "tags", "summary_short", "summary_long", "technical_depth", "take", "qa"];
     this.groupLabels = {
       api: "API 连接",
       directory: "目录更新管理",
-      logs: "日志与报错",
       ai_title: "参考标题 AI Title",
       tags: "标签 AI Tags",
       summary_short: "短摘要 AI Summary Short",
@@ -4147,6 +3503,10 @@ class AiMetadataSettingTab extends PluginSettingTab {
       }));
 
     new Setting(containerEl)
+      .setName("Token 消耗提示")
+      .setDesc("结构化合并请求已下线（错误率过高），当前改为逐字段（summary_short、summary_long、tags、technical_depth、take、qa、AI_title）单独请求生成，因此 Token 消耗比旧合并模式明显更高，请留意。本插件仅手动更新，无自动定时任务。");
+
+    new Setting(containerEl)
       .setName("白名单目录")
       .setDesc("默认根目录 /00_docs。仅该目录及其子目录中的 .md 显示 AI 图标并参与自动更新。")
       .addText((text) => text.setValue(this.plugin.settings.whitelistFolder).onChange(async (value) => {
@@ -4158,7 +3518,7 @@ class AiMetadataSettingTab extends PluginSettingTab {
 
     const catalogSetting = new Setting(containerEl)
       .setName("本地 Tag 索引")
-      .setDesc("从白名单目录内所有 Markdown 的 frontmatter tags + 行内 #tags 建立，只作为本地索引供你查看；不会发送给 AI，因此不会增加 Token。注意：AI 生成的标签已不再做大小写匹配或改写（AI 给什么就写什么）。")
+      .setDesc("从白名单目录内所有 Markdown 的 frontmatter tags + 行内 #tags 建立，仅用于本地大小写匹配；不会发送给 AI，因此不会增加 Token。层级标签只取最后一级 value。")
       .addButton((button) => button.setButtonText("重新扫描").onClick(async () => {
         button.setDisabled(true).setButtonText("扫描中…");
         try {
@@ -4179,6 +3539,14 @@ class AiMetadataSettingTab extends PluginSettingTab {
       text: catalogEntries.length ? catalogEntries.map((x) => `${x.value} ×${x.count}`).join("  ·  ") : "暂无标签，点击“重新扫描”。",
     });
     void catalogSetting;
+
+    new Setting(containerEl)
+      .setName("标签大小写规范化（Tag）")
+      .setDesc("默认开启。AI 返回 Tag 后在本地处理：Vault 已有同名 Tag（忽略大小写）时沿用已有写法；若存在多个历史大小写变体，沿用出现次数最多的写法；Vault 尚无该 Tag 时再使用下方技术词标准写法。")
+      .addToggle((toggle) => toggle.setValue(this.plugin.settings.tagCaseNormalizationEnabled !== false).onChange(async (value) => {
+        this.plugin.settings.tagCaseNormalizationEnabled = value;
+        await this.plugin.saveAllData();
+      }));
 
     new Setting(containerEl)
       .setName("整理已有 Tag 大小写冲突")
@@ -4214,99 +3582,6 @@ class AiMetadataSettingTab extends PluginSettingTab {
       .addButton((button) => button.setCta().setButtonText("打开文件夹树").onClick(() => {
         this.plugin.openPendingNotesDashboard();
       }));
-
-    new Setting(containerEl)
-      .setName("格式巡检（手动一次）")
-      .setDesc("扫描白名单目录（开启 status 校验时只含 status: done 的文章）里 7 个字段的格式，列出「有内容但正则不通过 / 空值 / 字段缺失」的项。"
-        + "每条可单独勾选后逐项 AI 修复（每次只重新生成那一个字段），修完立刻做一次二次验证；不会定期自动运行，也不会重复重跑，仍不通过的留给人工检查。")
-      .addButton((button) => button.setCta().setButtonText("打开格式巡检").onClick(() => {
-        this.plugin.openFormatInspection();
-      }));
-
-    // ---------- 缺失元数据补全 / 顺序修正（子模块） ----------
-    new Setting(containerEl)
-      .setName("缺失元数据补全 / 顺序修正")
-      .setDesc("只管「存不存在」与「顺序对不对」（格式是否合规用上面的「格式巡检」）。"
-        + "巡检会列出缺失/为空的 AI 字段，以及 AI 字段顺序与下面「元数据顺序」不一致的文章；"
-        + "处理时逐篇先摆正顺序 → 只重新生成缺的字段 → 再摆一次顺序 → 做一次二次验证（不重复运行）。非 AI 字段一律不动。")
-      .addButton((button) => button.setCta().setButtonText("打开补全面板").onClick(() => {
-        this.plugin.openMetadataGap();
-      }));
-
-    new Setting(containerEl)
-      .setName("元数据顺序（每行一个字段）")
-      .setDesc("一行一个 frontmatter 键，默认 7 项 AI 字段。补全时会按这个顺序插入缺失字段，顺序巡检也按它判断对错。"
-        + "只影响 AI_ 开头的字段（status / visibility / updated / token_count 等键不会被动）。")
-      .setClass("ai-metadata-setting-stacked")
-      .addTextArea((area) => {
-        area.inputEl.rows = 8;
-        area.inputEl.addClass("ai-metadata-harness-textarea");
-        area.setValue(this.plugin.settings.metadataKeyOrder).onChange(async (value) => {
-          this.plugin.settings.metadataKeyOrder = value;
-          await this.plugin.saveAllData();
-        });
-      })
-      .addButton((button) => button.setButtonText("恢复默认顺序").onClick(async () => {
-        this.plugin.settings.metadataKeyOrder = DEFAULT_METADATA_KEY_ORDER;
-        await this.plugin.saveAllData();
-        this.display();
-      }));
-
-    // ---------- 日志与报错（独立分组：下拉栏里的「日志与报错」） ----------
-    containerEl.createEl("h3", { text: "日志与报错" });
-    const logStats = this.plugin.getLogStats();
-    new Setting(containerEl)
-      .setName("日志与报错")
-      .setDesc(
-        `当前共 ${logStats.total} 条日志（错误 ${logStats.errors}、警告 ${logStats.warns}），另有 ${logStats.fileErrors} 篇笔记留有「上次错误」。`
-        + "日志只记录插件自身的运行结果与错误摘要（失败时附带模型原始输出），不含笔记正文。"
-        + "点「查看日志与报错」看详情；「立即清理」按保留天数清理；「清空日志」全部删除。",
-      )
-      .addButton((button) => button.setCta().setButtonText("查看日志与报错").onClick(() => {
-        this.plugin.pruneLogs();
-        new LogViewerModal(this.app, this.plugin).open();
-      }))
-      .addButton((button) => button.setButtonText("立即清理").onClick(async () => {
-        const removed = this.plugin.pruneLogs();
-        await this.plugin.saveAllData();
-        new Notice(`xyblue135 私人·AI 元数据：已按保留 ${logStats.retentionDays} 天清理，删除 ${removed} 条`);
-        this.display();
-      }))
-      .addButton((button) => button.setButtonText("清空日志").onClick(async () => {
-        const count = this.plugin.clearLogs();
-        await this.plugin.saveAllData();
-        new Notice(`xyblue135 私人·AI 元数据：已清空 ${count} 条日志`);
-        this.display();
-      }));
-
-    new Setting(containerEl)
-      .setName("日志条数上限")
-      .setDesc("超过上限自动丢弃最早的日志。默认 300，范围 20～2000。改成更小的值会立即截断已有日志。")
-      .addText((text) => {
-        text.inputEl.type = "number";
-        text.setValue(String(this.plugin.settings.logMaxEntries)).onChange(async (value) => {
-          const next = Number.parseInt(value, 10);
-          if (Number.isFinite(next) && next >= 20 && next <= 2000) {
-            this.plugin.settings.logMaxEntries = next;
-            this.plugin.trimLogs();
-            await this.plugin.saveAllData();
-          }
-        });
-      });
-
-    new Setting(containerEl)
-      .setName("日志保留天数")
-      .setDesc("打开日志或点「立即清理」时，自动删除超过该天数的日志。填 0 表示不按时间清理（只受条数上限约束）。默认 3 天。")
-      .addText((text) => {
-        text.inputEl.type = "number";
-        text.setValue(String(this.plugin.settings.logRetentionDays)).onChange(async (value) => {
-          const next = Number.parseInt(value, 10);
-          if (Number.isFinite(next) && next >= 0 && next <= 365) {
-            this.plugin.settings.logRetentionDays = next;
-            await this.plugin.saveAllData();
-          }
-        });
-      });
 
     new Setting(containerEl)
       .setName("导出元数据 CSV（含工作树路径）")
@@ -4351,6 +3626,14 @@ class AiMetadataSettingTab extends PluginSettingTab {
           await this.plugin.saveAllData();
         });
       });
+
+    new Setting(containerEl)
+      .setName("标签值安全约束（固定）")
+      .setDesc("始终生效，不能关闭：限制标签字符，并要求 B+树/C++/.NET 等技术名词改写为合法别名。本地 validator 还会在写入前再次硬过滤。")
+      .addButton((button) => button.setButtonText("查看规则").onClick(() => {
+        new Notice(TAG_VALUE_SAFETY_PROTOCOL, 10000);
+      }));
+
 
     new Setting(containerEl)
       .setName("标签语义约束内容")
@@ -4455,52 +3738,7 @@ class AiMetadataSettingTab extends PluginSettingTab {
         }
       }));
 
-    // ---------- 各 AI 模块的格式校验配置（纯本地正则，与上面的提示词分开存放） ----------
-    // 这些设置项集中在这里创建，但 decorateSettingsPanel() + _groupKeyForNode()
-    // 会把它们分别归入各自 AI 模块的分组卡片，所以 UI 上仍出现在对应模块下面。
-    containerEl.createEl("h3", { text: "格式校验（正则）" });
-    ["summary_short", "summary_long", "tags", "technical_depth", "take", "qa", "ai_title"]
-      .forEach((kind) => this.addFormatCheckSetting(containerEl, kind));
-
     this.decorateSettingsPanel(containerEl);
-  }
-
-  // 单个 AI 模块的「格式校验」设置项：开关 + 规则 textarea + 恢复默认。
-  // 与上面的 Harness（提示词）完全分开存放：Harness 在 settings.xxxHarness，
-  // 校验规则在 settings.formatChecks[kind].rules，两者互不影响。
-  addFormatCheckSetting(containerEl, kind) {
-    const readConfig = () => this.plugin.getFormatCheckConfig(kind);
-    // 永远写回 settings.formatChecks[kind] 自己的对象，避免误改默认常量。
-    const writeConfig = (patch) => {
-      this.plugin.settings.formatChecks[kind] = { ...readConfig(), ...patch };
-    };
-    const config = readConfig();
-
-    return new Setting(containerEl)
-      .setName(`格式校验：${this.plugin.fieldKeyForKind(kind)}`)
-      .setDesc(this.plugin.describeFormatCheck(kind))
-      .setClass("ai-metadata-setting-stacked")
-      .addToggle((toggle) => toggle
-        .setValue(config.enabled !== false)
-        .setTooltip("关闭后点 ✓ 按钮会直接提示「已跳过」")
-        .onChange(async (value) => {
-          writeConfig({ enabled: value });
-          await this.plugin.saveAllData();
-          this.display();
-        }))
-      .addButton((button) => button.setButtonText("恢复默认规则").onClick(async () => {
-        writeConfig({ enabled: true, rules: DEFAULT_FORMAT_CHECKS[kind].rules });
-        await this.plugin.saveAllData();
-        this.display();
-      }))
-      .addTextArea((area) => {
-        area.inputEl.rows = 8;
-        area.inputEl.addClass("ai-metadata-harness-textarea");
-        area.setValue(config.rules).onChange(async (value) => {
-          writeConfig({ rules: value });
-          await this.plugin.saveAllData();
-        });
-      });
   }
 
   decorateSettingsPanel(containerEl) {
@@ -4565,20 +3803,17 @@ class AiMetadataSettingTab extends PluginSettingTab {
       "是否喂给 AI 元数据信息": "directory",
       "喂入文章标题（全局）": "directory",
       "运行前清空本次字段": "directory",
+      "Token 消耗提示": "directory",
       "白名单目录": "directory",
       "显示 AI 状态": "directory",
       "元数据 status 校验": "directory",
       "待更新笔记 / 文件夹识别": "directory",
-      "格式巡检（手动一次）": "directory",
-      "缺失元数据补全 / 顺序修正": "directory",
-      "元数据顺序（每行一个字段）": "directory",
       "导出元数据 CSV（含工作树路径）": "directory",
       "导出字段与提示词 CSV": "directory",
-      "日志与报错": "logs",
-      "日志条数上限": "logs",
-      "日志保留天数": "logs",
       "本地 Tag 索引": "tags",
+      "标签大小写规范化（Tag）": "tags",
       "整理已有 Tag 大小写冲突": "tags",
+      "标签值安全约束（固定）": "tags",
       "标签语义约束内容": "tags",
       "短摘要语义约束内容": "summary_short",
       "长摘要语义约束内容": "summary_long",
@@ -4586,14 +3821,6 @@ class AiMetadataSettingTab extends PluginSettingTab {
       "客观评价约束内容": "take",
       "参考标题约束内容": "ai_title",
       "面试问答约束内容": "qa",
-      // 各模块的「格式校验：AI_xxx」设置项（逐个显式列出，避免落到默认的 api 分组）
-      "格式校验：AI_summary_short": "summary_short",
-      "格式校验：AI_summary_long": "summary_long",
-      "格式校验：AI_tags": "tags",
-      "格式校验：AI_technical_depth": "technical_depth",
-      "格式校验：AI_take": "take",
-      "格式校验：AI_qa": "qa",
-      "格式校验：AI_title": "ai_title",
     };
     return map[name] || "api";
   }
@@ -4636,795 +3863,6 @@ class AiMetadataSettingTab extends PluginSettingTab {
       group.classList.toggle("is-active", active);
       group.classList.toggle("is-hidden", !active);
     });
-  }
-}
-
-// 缺失元数据补全 / 顺序修正（子模块）
-//   职责：只管「存不存在」与「顺序对不对」（格式是否合规由「格式巡检」负责）。
-//   1) 点「巡检一次」→ 扫描白名单目录（开启 status 校验时只含 status: done）：
-//      哪些文章的 AI 字段缺失/为空、哪些文章的 AI 字段顺序不符合配置；
-//   2) 勾选（或全选 + 「本次处理数量」）后点「补全并排序」：
-//      逐篇先本地摆正顺序 → 只重新生成缺的/空的那个字段 → 再摆一次顺序 → 二次验证；
-//   3) 不重复运行，仍不合格的留给人工检查。
-class MetadataGapModal extends Modal {
-  constructor(app, plugin) {
-    super(app);
-    this.plugin = plugin;
-    this.data = null;
-    this.selected = new Set();
-    this.results = null;
-    this.busy = false;
-    this.progressText = "";
-    this.renderLimit = 200;
-    this.fixLimit = 10;
-    this.itemCheckboxes = [];
-    this.fixButtonEl = null;
-    this.progressEl = null;
-  }
-
-  onOpen() {
-    this.modalEl.addClass("ai-metadata-gap-modal");
-    this.render();
-  }
-
-  onClose() {
-    this.contentEl.empty();
-  }
-
-  itemKey(item) {
-    return item.path;
-  }
-
-  render() {
-    const { contentEl } = this;
-    contentEl.empty();
-    this.fixButtonEl = null;
-    this.progressEl = null;
-    contentEl.createEl("h2", { text: "缺失元数据补全 / 顺序修正" });
-    contentEl.createEl("p", {
-      cls: "setting-item-description",
-      text: "巡检「存不存在」与「顺序对不对」：缺失/为空的 AI 字段会被列出来，AI 字段顺序与设置里「元数据顺序」不一致的也会被标出来。"
-        + "补全会逐个字段重新生成（只生成缺的那些），并把 AI 字段按配置顺序摆正；非 AI 字段（status 等）一律不动。格式是否合规请用「格式巡检」。",
-    });
-    const orderText = this.plugin.getMetadataKeyOrder().join(" → ");
-    contentEl.createEl("p", { cls: "setting-item-description", text: `当前元数据顺序：${orderText}` });
-
-    const toolbar = contentEl.createDiv({ attr: { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 10px;" } });
-    const addButton = (label, fn, cls) => {
-      const button = toolbar.createEl("button", { text: label, cls: cls || "" });
-      button.addEventListener("click", fn);
-      return button;
-    };
-    addButton("巡检一次", () => void this.runInspection(), "mod-cta");
-    this.fixButtonEl = addButton("补全并排序（已选 0，本次 0）", () => void this.runFix(), "");
-    addButton("仅修正顺序（不调 AI）", () => void this.runOrderFixOnly(), "");
-    addButton("停止", () => {
-      if (this.plugin.stopMetadataGapRun()) {
-        this.progressText = "正在停止…";
-        this.updateProgressUI();
-      }
-    });
-    addButton("全选", () => {
-      if (!this.data) return;
-      this.data.items.forEach((it) => this.selected.add(this.itemKey(it)));
-      this.syncCheckboxes();
-      this.updateSelectionUI();
-    });
-    addButton("全不选", () => {
-      this.selected.clear();
-      this.syncCheckboxes();
-      this.updateSelectionUI();
-    });
-
-    const limitWrap = toolbar.createEl("label", { attr: { style: "display:flex;gap:4px;align-items:center;margin-left:4px;" } });
-    limitWrap.createSpan({ text: "本次处理数量（0=全部）" });
-    const limitInput = limitWrap.createEl("input", { type: "number" });
-    limitInput.value = String(this.fixLimit);
-    limitInput.setAttribute("style", "width:72px;");
-    limitInput.addEventListener("change", () => {
-      const next = Number.parseInt(limitInput.value, 10);
-      this.fixLimit = Number.isFinite(next) && next >= 0 ? next : 0;
-      limitInput.value = String(this.fixLimit);
-      this.updateSelectionUI();
-    });
-
-    this.progressEl = contentEl.createDiv({ cls: "ai-metadata-pending-loading" });
-    this.updateProgressUI();
-
-    if (!this.data) {
-      contentEl.createEl("div", { cls: "ai-metadata-pending-empty", text: "点「巡检一次」扫描一次。处理完不会自动重跑，需要时再手动点一次。" });
-      return;
-    }
-
-    const s = this.data.stats;
-    const summary = contentEl.createDiv({ cls: "ai-metadata-pending-summary" });
-    summary.createSpan({ text: `巡检 ${s.scanned}/${s.whitelistTotal} 篇` });
-    if (s.statusFilterEnabled) summary.createSpan({ text: ` · 状态过滤 ${s.statusFiltered} 篇`, cls: "is-skipped" });
-    summary.createSpan({ text: ` · 缺失 ${s.missingKeys} 项`, cls: s.missingKeys ? "is-pending" : "is-done" });
-    summary.createSpan({ text: ` · 空值 ${s.emptyKeys} 项` });
-    summary.createSpan({ text: ` · 顺序问题 ${s.orderIssues} 篇`, cls: s.orderIssues ? "is-pending" : "is-done" });
-    summary.createSpan({ text: ` · 完整 ${s.complete} 篇` });
-    summary.createSpan({ text: ` · 涉及 ${s.filesWithIssue} 篇` });
-
-    const totalItems = this.data.items.length;
-    contentEl.createEl("h4", { text: `巡检结果（${totalItems} 篇${totalItems > this.renderLimit ? `，下面只显示前 ${this.renderLimit} 篇` : ""}）` });
-    if (!totalItems) {
-      contentEl.createEl("p", { cls: "setting-item-description", text: "✅ 所有文章的 AI 字段都不缺、顺序也正确。" });
-      return;
-    }
-
-    const listBox = contentEl.createDiv({
-      attr: { style: "max-height:420px;overflow:auto;border:1px solid var(--background-modifier-border);border-radius:6px;padding:6px;" },
-    });
-    this.itemCheckboxes = [];
-    const resultByPath = new Map((this.results || []).map((r) => [r.path, r]));
-
-    for (const item of this.data.items.slice(0, this.renderLimit)) {
-      const row = listBox.createDiv({ attr: { style: "padding:5px 6px;border-bottom:1px solid var(--background-modifier-border-hover);font-size:12px;" } });
-      const head = row.createEl("div", { attr: { style: "display:flex;gap:8px;align-items:flex-start;" } });
-      const box = head.createEl("input", { type: "checkbox" });
-      const key = this.itemKey(item);
-      box.checked = this.selected.has(key);
-      box.addEventListener("change", () => {
-        if (box.checked) this.selected.add(key);
-        else this.selected.delete(key);
-        this.updateSelectionUI();
-      });
-      this.itemCheckboxes.push({ key, box });
-
-      const wrap = head.createDiv({ attr: { style: "flex:1;min-width:0;" } });
-      wrap.createEl("div", { text: item.path, attr: { style: "word-break:break-all;" } });
-      if (item.missingKeys.length) {
-        wrap.createEl("div", { text: `➖ 缺失：${item.missingKeys.join("、")}`, attr: { style: "color:var(--text-error);margin-top:2px;" } });
-      }
-      if (item.emptyKeys.length) {
-        wrap.createEl("div", { text: `⚠️ 空值：${item.emptyKeys.join("、")}`, attr: { style: "color:var(--text-warning);margin-top:2px;" } });
-      }
-      if (item.orderIssue) {
-        wrap.createEl("div", { text: `🔀 顺序：实际 ${item.actualAi.join(" → ")}`, attr: { style: "margin-top:2px;" } });
-        wrap.createEl("div", { text: `　　　应为 ${item.expectedAi.join(" → ")}`, attr: { style: "opacity:0.8;" } });
-      }
-
-      const result = resultByPath.get(key);
-      if (result) {
-        const verdict = result.error
-          ? `❌ 处理失败：${result.error}`
-          : result.fixed
-            ? "✅ 二次验证通过（字段齐全且顺序正确）"
-            : `⚠️ 二次验证仍不合格：${(result.after && result.after.reason) || ""}（请人工检查）`;
-        wrap.createEl("div", { text: verdict, attr: { style: `margin-top:2px;color:${result.fixed ? "var(--text-success)" : "var(--text-error)"};` } });
-        if (result.after && result.after.aiKeysInFile) {
-          wrap.createEl("div", { text: `处理后顺序：${result.after.aiKeysInFile.join(" → ")}`, attr: { style: "opacity:0.8;" } });
-        }
-      }
-    }
-
-    if (totalItems > this.renderLimit) {
-      const more = contentEl.createEl("button", { text: `显示更多（还有 ${totalItems - this.renderLimit} 篇）` });
-      more.addEventListener("click", () => {
-        this.renderLimit += 200;
-        this.render();
-      });
-    }
-
-    this.updateSelectionUI();
-  }
-
-  updateSelectionUI() {
-    const selected = this.data ? this.data.items.filter((it) => this.selected.has(this.itemKey(it))) : [];
-    const limit = this.fixLimit > 0 ? Math.min(this.fixLimit, selected.length) : selected.length;
-    if (this.fixButtonEl) {
-      this.fixButtonEl.setText(`补全并排序（已选 ${selected.length}，本次 ${limit}）`);
-      this.fixButtonEl.toggleClass("mod-warning", selected.length > 0);
-    }
-  }
-
-  syncCheckboxes() {
-    for (const entry of this.itemCheckboxes || []) {
-      entry.box.checked = this.selected.has(entry.key);
-    }
-  }
-
-  updateProgressUI() {
-    if (!this.progressEl || !this.progressEl.isConnected) return;
-    this.progressEl.setText(this.progressText || "");
-  }
-
-  async runInspection() {
-    if (this.busy) return;
-    this.busy = true;
-    this.progressText = "正在巡检…";
-    this.results = null;
-    this.selected.clear();
-    this.render();
-    try {
-      this.data = await this.plugin.runMetadataGapInspection({
-        onProgress: (event) => {
-          this.progressText = event.done ? `扫描完成：${event.total} 篇` : `正在扫描 ${event.scanned}/${event.total}…`;
-          this.updateProgressUI();
-        },
-      });
-    } catch (error) {
-      new Notice(`xyblue135 私人·AI 元数据：巡检失败：${error instanceof Error ? error.message : String(error)}`, 8000);
-      this.data = null;
-    } finally {
-      this.busy = false;
-      this.progressText = "";
-      if (this.contentEl.isConnected) this.render();
-    }
-  }
-
-  async runFix() {
-    if (this.busy || !this.data) return;
-    const all = this.data.items.filter((it) => this.selected.has(this.itemKey(it)));
-    if (!all.length) {
-      new Notice("xyblue135 私人·AI 元数据：请先勾选要处理的文章");
-      return;
-    }
-    const items = this.plugin.pickRepairItems(all, this.fixLimit);
-    this.busy = true;
-    this.results = null;
-    this.progressText = `准备处理 ${items.length} 篇（每次生成后等待 ${this.plugin.settings.requestIntervalSeconds} 秒）…`;
-    this.render();
-    try {
-      this.results = await this.plugin.fixMetadataGaps(items, (event) => {
-        this.progressText = `[${event.index}/${event.total}] ${event.path}`
-          + (event.phase === "success" ? " · ✅ 二次验证通过"
-            : event.phase === "still-issue" ? " · ⚠️ 仍不合格"
-              : event.phase === "error" ? " · ❌ 失败" : " · 处理中…");
-        this.updateProgressUI();
-      });
-      const ok = this.results.filter((r) => r.fixed).length;
-      const still = this.results.filter((r) => !r.fixed && !r.stopped).length;
-      const remaining = all.length - items.length;
-      new Notice(`xyblue135 私人·AI 元数据：处理完成 — 二次验证通过 ${ok} 篇，仍需人工检查 ${still} 篇`
-        + `${remaining > 0 ? `；本次未处理 ${remaining} 篇（受「本次处理数量」限制）` : ""}（不会自动重跑）`, 11000);
-    } finally {
-      this.busy = false;
-      this.progressText = "";
-      if (this.contentEl.isConnected) this.render();
-    }
-  }
-
-  // 只修正顺序：纯本地重排，不调用 AI、不产生费用。
-  async runOrderFixOnly() {
-    if (this.busy || !this.data) return;
-    const targets = this.data.items.filter((it) => this.selected.has(this.itemKey(it)) && it.orderIssue);
-    const list = this.plugin.pickRepairItems(targets, this.fixLimit);
-    if (!list.length) {
-      new Notice("xyblue135 私人·AI 元数据：勾选项里没有「顺序问题」的文章");
-      return;
-    }
-    this.busy = true;
-    this.progressText = `正在修正 ${list.length} 篇的顺序…`;
-    this.render();
-    const results = [];
-    try {
-      for (const item of list) {
-        try {
-          await this.plugin.fixMetadataKeyOrder(item.file);
-          const after = await this.plugin.verifyMetadataGaps(item.file);
-          results.push({ ...item, after, fixed: after.orderOk });
-        } catch (error) {
-          results.push({ ...item, error: error instanceof Error ? error.message : String(error), after: null, fixed: false });
-        }
-      }
-      this.results = results;
-      const ok = results.filter((r) => r.fixed).length;
-      new Notice(`xyblue135 私人·AI 元数据：顺序修正完成 — ${ok}/${results.length} 篇顺序已正确`, 8000);
-    } finally {
-      this.busy = false;
-      this.progressText = "";
-      if (this.contentEl.isConnected) this.render();
-    }
-  }
-}
-
-// 格式巡检面板（手动一次）：
-//   1) 点「开始巡检」→ 扫描白名单目录（并按 status: done 过滤）里 7 个字段的格式；
-//   2) 每条问题前有勾选框，可单独勾选要修的项；
-//   3) 点「AI 修复选中项」→ 逐项只重新生成那一个字段 → 立刻做一次二次验证；
-//   4) 修完不再重复运行，仍不通过的留给人工检查。
-class FormatInspectionModal extends Modal {
-  constructor(app, plugin) {
-    super(app);
-    this.plugin = plugin;
-    this.data = null;
-    this.selected = new Set();
-    this.repairResults = null;
-    // 默认不勾选：格式巡检只关心「有内容但格式不对」，缺失/空值交给「缺失元数据补全」子模块。
-    this.includeMissing = false;
-    this.busy = false;
-    this.progressText = "";
-    // 性能相关：结果列表默认只渲染前 200 条（避免上千个 DOM 节点卡死）；
-    // 全选之后默认一次只修 10 项，可用界面上的「本次修复数量」随时调整（0 = 全部）。
-    this.renderLimit = 200;
-    this.repairLimit = 10;
-    this.itemCheckboxes = [];
-    this.repairButtonEl = null;
-    this.progressEl = null;
-  }
-
-  onOpen() {
-    this.modalEl.addClass("ai-metadata-inspection-modal");
-    this.render();
-  }
-
-  onClose() {
-    this.contentEl.empty();
-  }
-
-  itemKey(item) {
-    return `${item.path}::${item.kind}`;
-  }
-
-  categoryLabel(category) {
-    if (category === "fail") return { text: "格式不通过", icon: "❌" };
-    if (category === "empty") return { text: "空值", icon: "⚠️" };
-    return { text: "字段缺失", icon: "➖" };
-  }
-
-  render() {
-    const { contentEl } = this;
-    contentEl.empty();
-    this.repairButtonEl = null;
-    this.selectionLabelEl = null;
-    this.progressEl = null;
-    contentEl.createEl("h2", { text: "格式巡检（手动一次）" });
-    contentEl.createEl("p", {
-      cls: "setting-item-description",
-      text: "只巡检白名单目录（开启 status 校验时只含 status: done 的文章），对 7 个字段执行各模块设置里的「格式校验」正则。"
-        + "本操作只读取、不修改任何数据；修复时才写入，且每次只重新生成一个字段。",
-    });
-
-    // ---------- 勾选项 ----------
-    const options = contentEl.createDiv({ attr: { style: "display:flex;flex-direction:column;gap:4px;margin:6px 0 10px;" } });
-    const mkCheck = (label, checked, onChange) => {
-      const wrap = options.createEl("label", { attr: { style: "display:flex;gap:6px;align-items:center;cursor:pointer;" } });
-      const box = wrap.createEl("input", { type: "checkbox" });
-      box.checked = checked;
-      box.addEventListener("change", () => onChange(box.checked));
-      wrap.createSpan({ text: label });
-      return box;
-    };
-    mkCheck("把「字段缺失 / 空值」也算作问题", this.includeMissing, (v) => {
-      this.includeMissing = v;
-      this.data = null;
-      this.selected.clear();
-      this.repairResults = null;
-      this.render();
-    });
-    const statusNote = this.plugin.settings.statusDoneOnlyEnabled === true
-      ? "☑ 只巡检 status: done 的文章（来自「元数据 status 校验」设置）"
-      : "☐ 未启用 status 校验：将巡检白名单目录里的全部文章";
-    options.createEl("div", { cls: "setting-item-description", text: statusNote });
-
-    // ---------- 操作按钮 ----------
-    const toolbar = contentEl.createDiv({ attr: { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;" } });
-    const addButton = (label, fn, cls) => {
-      const button = toolbar.createEl("button", { text: label, cls: cls || "" });
-      button.addEventListener("click", fn);
-      return button;
-    };
-    addButton("开始巡检", () => void this.runInspection(), "mod-cta");
-    this.repairButtonEl = addButton("AI 修复选中项（0）", () => void this.runRepair(), "");
-    addButton("停止修复", () => {
-      if (this.plugin.stopFormatInspection()) {
-        this.progressText = "正在停止…";
-        this.updateProgressUI();
-      }
-    });
-    // 全选/全不选只更新计数与按钮文字，不整页重渲染（整页重渲染是巡检卡顿的主因）。
-    addButton("全选", () => {
-      if (!this.data) return;
-      this.data.items.forEach((it) => this.selected.add(this.itemKey(it)));
-      this.syncSelectionToCheckboxes();
-      this.updateSelectionUI();
-    });
-    addButton("全不选", () => {
-      this.selected.clear();
-      this.syncSelectionToCheckboxes();
-      this.updateSelectionUI();
-    });
-
-    // 数量输入：全选之后只修复前 N 项（0 表示不限）
-    const limitWrap = toolbar.createEl("label", { attr: { style: "display:flex;gap:4px;align-items:center;margin-left:4px;" } });
-    limitWrap.createSpan({ text: "本次修复数量（0=全部）" });
-    const limitInput = limitWrap.createEl("input", { type: "number" });
-    limitInput.value = String(this.repairLimit);
-    limitInput.setAttribute("style", "width:72px;");
-    limitInput.addEventListener("change", () => {
-      const next = Number.parseInt(limitInput.value, 10);
-      this.repairLimit = Number.isFinite(next) && next >= 0 ? next : 0;
-      limitInput.value = String(this.repairLimit);
-      this.updateSelectionUI();
-    });
-
-    this.progressEl = contentEl.createDiv({ cls: "ai-metadata-pending-loading" });
-    this.updateProgressUI();
-
-    // ---------- 巡检结果 ----------
-    if (!this.data) {
-      contentEl.createEl("div", { cls: "ai-metadata-pending-empty", text: "点「开始巡检」扫描一次。修复后不会自动重跑，需要时再手动点一次。" });
-      return;
-    }
-
-    const s = this.data.stats;
-    const summary = contentEl.createDiv({ cls: "ai-metadata-pending-summary" });
-    summary.createSpan({ text: `巡检 ${s.scanned}/${s.whitelistTotal} 篇` });
-    if (s.statusFilterEnabled) summary.createSpan({ text: ` · 状态过滤 ${s.statusFiltered} 篇`, cls: "is-skipped" });
-    summary.createSpan({ text: ` · 格式不通过 ${s.fail}`, cls: s.fail ? "is-pending" : "is-done" });
-    summary.createSpan({ text: ` · 空值 ${s.empty}` });
-    summary.createSpan({ text: ` · 缺失 ${s.missing}` });
-    summary.createSpan({ text: ` · 通过 ${s.pass}` });
-    if (s.rulesSkipped) summary.createSpan({ text: ` · 跳过（无规则/已关闭）${s.rulesSkipped}`, cls: "is-skipped" });
-    summary.createSpan({ text: ` · 涉及 ${s.filesWithIssue} 篇` });
-
-    const totalItems = this.data.items.length;
-    contentEl.createEl("h4", { text: `巡检结果（${totalItems} 条${totalItems > this.renderLimit ? `，下面只显示前 ${this.renderLimit} 条` : ""}）` });
-    if (!totalItems) {
-      contentEl.createEl("p", { cls: "setting-item-description", text: "✅ 全部字段都符合各自的正则规则。" });
-      return;
-    }
-
-    // 性能：默认只渲染前 N 条，避免一次创建上千个 DOM 节点导致卡死。
-    const listBox = contentEl.createDiv({
-      attr: { style: "max-height:420px;overflow:auto;border:1px solid var(--background-modifier-border);border-radius:6px;padding:6px;" },
-    });
-    this.itemCheckboxes = [];
-    const shown = this.data.items.slice(0, this.renderLimit);
-    const resultByKey = new Map((this.repairResults || []).map((r) => [`${r.path}::${r.kind}`, r]));
-
-    for (const item of shown) {
-      const meta = this.categoryLabel(item.category);
-      const row = listBox.createDiv({ attr: { style: "padding:5px 6px;border-bottom:1px solid var(--background-modifier-border-hover);font-size:12px;" } });
-      const head = row.createEl("div", { attr: { style: "display:flex;gap:8px;align-items:flex-start;" } });
-      const box = head.createEl("input", { type: "checkbox" });
-      const key = this.itemKey(item);
-      box.checked = this.selected.has(key);
-      box.addEventListener("change", () => {
-        if (box.checked) this.selected.add(key);
-        else this.selected.delete(key);
-        this.updateSelectionUI();
-      });
-      this.itemCheckboxes.push({ key, box });
-
-      const textWrap = head.createDiv({ attr: { style: "flex:1;min-width:0;" } });
-      textWrap.createEl("div", { text: `${meta.icon} ${meta.text} · ${item.fieldKey}` });
-      textWrap.createEl("div", { text: item.path, attr: { style: "opacity:0.75;word-break:break-all;" } });
-      if (item.failedRules.length) {
-        const rules = textWrap.createEl("div", { attr: { style: "margin-top:2px;" } });
-        rules.createSpan({ text: "未匹配的规则：" });
-        item.failedRules.forEach((rule) => {
-          rules.createEl("div", { attr: { style: "margin-left:10px;" } }).createEl("code", { text: rule });
-        });
-      }
-      if (item.text) {
-        const details = textWrap.createEl("details");
-        details.createEl("summary", { text: `查看实际值（${item.text.length} 字符）` });
-        details.createEl("pre", {
-          text: item.text,
-          attr: { style: "white-space:pre-wrap;word-break:break-all;max-height:160px;overflow:auto;font-size:11px;margin:4px 0;" },
-        });
-      }
-      const result = resultByKey.get(key);
-      if (result) {
-        const verdict = result.repairError
-          ? `❌ 修复失败：${result.repairError}`
-          : result.repaired
-            ? "✅ 二次验证通过"
-            : `⚠️ 二次验证仍不通过：${(result.after && result.after.reason) || ""}（请人工检查）`;
-        textWrap.createEl("div", { text: verdict, attr: { style: `margin-top:2px;color:${result.repaired ? "var(--text-success)" : "var(--text-error)"};` } });
-        if (result.after && result.after.failedRules && result.after.failedRules.length) {
-          result.after.failedRules.forEach((rule) => {
-            textWrap.createEl("div", { attr: { style: "margin-left:10px;" } }).createEl("code", { text: rule });
-          });
-        }
-        if (result.after && result.after.text) {
-          const afterDetails = textWrap.createEl("details");
-          afterDetails.createEl("summary", { text: "查看修复后的值" });
-          afterDetails.createEl("pre", {
-            text: result.after.text,
-            attr: { style: "white-space:pre-wrap;word-break:break-all;max-height:160px;overflow:auto;font-size:11px;margin:4px 0;" },
-          });
-        }
-      }
-    }
-
-    if (totalItems > this.renderLimit) {
-      const more = contentEl.createEl("button", { text: `显示更多（还有 ${totalItems - this.renderLimit} 条）` });
-      more.addEventListener("click", () => {
-        this.renderLimit += 200;
-        this.render();
-      });
-    }
-
-    this.updateSelectionUI();
-  }
-
-  // 只更新「选中数 + 修复按钮文字」，不重建 DOM。
-  updateSelectionUI() {
-    const selected = this.data ? this.data.items.filter((it) => this.selected.has(this.itemKey(it))) : [];
-    const limit = this.repairLimit > 0 ? Math.min(this.repairLimit, selected.length) : selected.length;
-    if (this.repairButtonEl) {
-      this.repairButtonEl.setText(`AI 修复选中项（已选 ${selected.length}，本次修复 ${limit}）`);
-      this.repairButtonEl.toggleClass("mod-warning", selected.length > 0);
-    }
-  }
-
-  // 全选/全不选后把已渲染的复选框同步一下，避免视觉与状态不一致。
-  syncSelectionToCheckboxes() {
-    for (const entry of this.itemCheckboxes || []) {
-      entry.box.checked = this.selected.has(entry.key);
-    }
-  }
-
-  updateProgressUI() {
-    if (!this.progressEl) return;
-    if (!this.progressEl.isConnected) return;
-    this.progressEl.setText(this.progressText || "");
-  }
-
-  async runInspection() {
-    if (this.busy) return;
-    this.busy = true;
-    this.progressText = "正在巡检…";
-    this.repairResults = null;
-    this.selected.clear();
-    this.render();
-    try {
-      this.data = await this.plugin.runFormatInspection({
-        includeMissing: this.includeMissing,
-        onProgress: (event) => {
-          this.progressText = event.done
-            ? `扫描完成：${event.total} 篇`
-            : `正在扫描 ${event.scanned}/${event.total}…`;
-          this.updateProgressUI();
-        },
-      });
-    } catch (error) {
-      new Notice(`xyblue135 私人·AI 元数据：巡检失败：${error instanceof Error ? error.message : String(error)}`, 8000);
-      this.data = null;
-    } finally {
-      this.busy = false;
-      this.progressText = "";
-      if (this.contentEl.isConnected) this.render();
-    }
-  }
-
-  async runRepair() {
-    if (this.busy || !this.data) return;
-    const all = this.data.items.filter((it) => this.selected.has(this.itemKey(it)));
-    if (!all.length) {
-      new Notice("xyblue135 私人·AI 元数据：请先勾选要修复的项");
-      return;
-    }
-    // 全选之后按「本次修复数量」截取，默认一次修 10 项，避免一口气跑几百项。
-    const items = this.plugin.pickRepairItems(all, this.repairLimit);
-    this.busy = true;
-    this.repairResults = null;
-    this.progressText = `准备修复 ${items.length} 项（每次生成后等待 ${this.plugin.settings.requestIntervalSeconds} 秒）…`;
-    this.render();
-    try {
-      this.repairResults = await this.plugin.repairInspectionItems(items, (event) => {
-        this.progressText = `[${event.index}/${event.total}] ${event.path} · ${event.fieldKey}`
-          + (event.phase === "success" ? " · ✅ 二次验证通过"
-            : event.phase === "still-failing" ? " · ⚠️ 仍不通过"
-              : event.phase === "error" ? " · ❌ 修复失败" : " · 生成中…");
-        this.updateProgressUI();
-      });
-      const ok = this.repairResults.filter((r) => r.repaired).length;
-      const still = this.repairResults.filter((r) => !r.repaired && !r.stopped).length;
-      const remaining = all.length - items.length;
-      new Notice(`xyblue135 私人·AI 元数据：修复完成 — 二次验证通过 ${ok} 项，仍需人工检查 ${still} 项`
-        + `${remaining > 0 ? `；本次未处理 ${remaining} 项（受「本次修复数量」限制）` : ""}（不会自动重跑）`, 11000);
-    } finally {
-      this.busy = false;
-      this.progressText = "";
-      if (this.contentEl.isConnected) this.render();
-    }
-  }
-}
-
-// 日志与报错查看器：只展示与清理，不修改任何笔记数据。
-class LogViewerModal extends Modal {
-  constructor(app, plugin) {
-    super(app);
-    this.plugin = plugin;
-  }
-
-  onOpen() {
-    this.render();
-  }
-
-  render() {
-    const { contentEl } = this;
-    contentEl.empty();
-    contentEl.addClass("ai-metadata-log-modal");
-    const stats = this.plugin.getLogStats();
-
-    contentEl.createEl("h2", { text: "日志与报错" });
-    contentEl.createEl("p", {
-      cls: "setting-item-description",
-      text: `共 ${stats.total} 条（错误 ${stats.errors}、警告 ${stats.warns}）；条数上限 ${stats.maxEntries}；`
-        + `保留 ${stats.retentionDays > 0 ? `${stats.retentionDays} 天` : "不限时间"}；`
-        + `另有 ${stats.fileErrors} 篇笔记留有「上次错误」。日志不含笔记正文。`,
-    });
-
-    const actions = contentEl.createDiv({ attr: { style: "display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px;" } });
-    const addAction = (label, fn) => {
-      const button = actions.createEl("button", { text: label });
-      button.addEventListener("click", fn);
-      return button;
-    };
-    addAction("立即清理（按保留天数）", () => {
-      const removed = this.plugin.pruneLogs();
-      new Notice(`xyblue135 私人·AI 元数据：已按保留天数清理 ${removed} 条`);
-      void this.plugin.saveAllData().then(() => this.render());
-    });
-    addAction("清空全部日志", () => {
-      const count = this.plugin.clearLogs();
-      new Notice(`xyblue135 私人·AI 元数据：已清空 ${count} 条日志`);
-      void this.plugin.saveAllData().then(() => this.render());
-    });
-    addAction("刷新", () => this.render());
-    addAction("复制全部日志", async () => {
-      const all = (Array.isArray(this.plugin.state.logs) ? this.plugin.state.logs : []);
-      const text = all.map((entry) => this.plugin.formatLogEntryForCopy(entry)).join("\n\n");
-      const ok = await this.plugin.copyTextToClipboard(text);
-      new Notice(ok ? `xyblue135 私人·AI 元数据：已复制 ${all.length} 条日志` : "xyblue135 私人·AI 元数据：复制失败");
-    });
-
-    const icon = (level) => (level === "error" ? "❌" : level === "warn" ? "⚠️" : level === "success" ? "✅" : "ℹ️");
-
-    contentEl.createEl("h4", { text: "运行日志（最新在前）" });
-    const logs = Array.isArray(this.plugin.state.logs) ? this.plugin.state.logs.slice().reverse() : [];
-    if (!logs.length) {
-      contentEl.createEl("p", { cls: "setting-item-description", text: "（暂无日志）" });
-    }
-    const listBox = contentEl.createDiv({
-      attr: { style: "max-height:380px;overflow:auto;border:1px solid var(--background-modifier-border);border-radius:6px;padding:6px;" },
-    });
-    for (const entry of logs.slice(0, 500)) {
-      const level = String(entry.level || "info");
-      const row = listBox.createDiv({
-        attr: {
-          style: "padding:4px 6px;border-bottom:1px solid var(--background-modifier-border-hover);"
-            + `font-size:12px;${level === "error" ? "color:var(--text-error);" : level === "warn" ? "color:var(--text-warning);" : ""}`,
-        },
-      });
-      const head = `${icon(level)} ${this.plugin.formatLogTime(entry.at)}`;
-      const where = [entry.phase, entry.errorType].filter(Boolean).join(" / ");
-      const headRow = row.createEl("div", { attr: { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap;" } });
-      headRow.createEl("span", { text: `${head}${where ? `  [${where}]` : ""}` });
-      // 单条复制：只复制这一条（含模型原始输出）
-      const copyOne = headRow.createEl("button", { text: "复制", attr: { type: "button", style: "font-size:11px;padding:1px 6px;" } });
-      copyOne.addEventListener("click", async (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const ok = await this.plugin.copyTextToClipboard(this.plugin.formatLogEntryForCopy(entry));
-        new Notice(ok ? "xyblue135 私人·AI 元数据：已复制这一条日志" : "xyblue135 私人·AI 元数据：复制失败（请手动选中文本）");
-      });
-      if (entry.file) row.createEl("div", { text: entry.file, attr: { style: "opacity:0.75;" } });
-      row.createEl("div", { text: String(entry.message || ""), attr: { style: "white-space:pre-wrap;word-break:break-all;" } });
-      if (entry.raw) {
-        const details = row.createEl("details");
-        details.createEl("summary", { text: "模型原始输出" });
-        details.createEl("pre", {
-          text: String(entry.raw),
-          attr: { style: "white-space:pre-wrap;word-break:break-all;max-height:200px;overflow:auto;font-size:11px;" },
-        });
-      }
-    }
-
-    contentEl.createEl("h4", { text: "按笔记汇总的「上次错误」" });
-    const fileErrors = this.plugin.getFileErrorSummary();
-    if (!fileErrors.length) {
-      contentEl.createEl("p", { cls: "setting-item-description", text: "（所有笔记都没有遗留错误）" });
-      return;
-    }
-    const errBox = contentEl.createDiv({
-      attr: { style: "max-height:300px;overflow:auto;border:1px solid var(--background-modifier-border);border-radius:6px;padding:6px;" },
-    });
-    for (const item of fileErrors) {
-      const row = errBox.createDiv({ attr: { style: "padding:4px 6px;border-bottom:1px solid var(--background-modifier-border-hover);font-size:12px;" } });
-      const errHead = row.createEl("div", { attr: { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap;" } });
-      errHead.createEl("span", { text: `❌ ${item.path}${item.lastErrorType ? `  [${item.lastErrorType}]` : ""}` });
-      const copyErr = errHead.createEl("button", { text: "复制", attr: { type: "button", style: "font-size:11px;padding:1px 6px;" } });
-      copyErr.addEventListener("click", async (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const text = [`文件：${item.path}`, `类型：${item.lastErrorType || "ERROR"}`, `错误：${item.lastError}`]
-          .concat(item.lastRawModelOutput ? ["", "模型原始输出：", item.lastRawModelOutput] : [])
-          .join("\n");
-        const ok = await this.plugin.copyTextToClipboard(text);
-        new Notice(ok ? "xyblue135 私人·AI 元数据：已复制该笔记的错误信息" : "xyblue135 私人·AI 元数据：复制失败");
-      });
-      row.createEl("div", { text: item.lastError, attr: { style: "white-space:pre-wrap;word-break:break-all;color:var(--text-error);" } });
-      if (item.lastRawModelOutput) {
-        const details = row.createEl("details");
-        details.createEl("summary", { text: "模型原始输出" });
-        details.createEl("pre", {
-          text: item.lastRawModelOutput,
-          attr: { style: "white-space:pre-wrap;word-break:break-all;max-height:200px;overflow:auto;font-size:11px;" },
-        });
-      }
-    }
-  }
-
-  onClose() {
-    this.contentEl.empty();
-  }
-}
-
-// 格式校验结果弹窗：只展示，不修改任何数据。
-class FormatCheckModal extends Modal {
-  constructor(app, plugin, result, file) {
-    super(app);
-    this.plugin = plugin;
-    this.result = result;
-    this.file = file;
-  }
-
-  onOpen() {
-    const { contentEl } = this;
-    contentEl.empty();
-    contentEl.addClass("ai-metadata-format-check-modal");
-    contentEl.createEl("h2", { text: `格式校验 · ${this.result.fieldKey}` });
-    contentEl.createEl("p", {
-      cls: "setting-item-description",
-      text: `笔记：${this.file.path}`,
-    });
-
-    if (this.result.skipped) {
-      contentEl.createEl("p", { text: `⏭ 已跳过：${this.result.reason}` });
-      contentEl.createEl("p", {
-        cls: "setting-item-description",
-        text: "可在 设置 → 对应 AI 模块 → 格式校验 里启用并编辑规则。",
-      });
-      return;
-    }
-
-    if (!this.result.present) {
-      contentEl.createEl("p", { text: `❌ 不通过：frontmatter 里没有 ${this.result.fieldKey} 这个键。` });
-      return;
-    }
-
-    const failed = this.result.rules.filter((rule) => !rule.ok);
-    contentEl.createEl("p", {
-      text: this.result.passed
-        ? `✅ 通过：${this.result.rules.length} 条规则全部匹配。`
-        : `❌ 不通过：${failed.length} / ${this.result.rules.length} 条规则未匹配。`,
-    });
-
-    const list = contentEl.createDiv();
-    for (const rule of this.result.rules) {
-      const row = list.createDiv({
-        attr: { style: "margin:6px 0;white-space:pre-wrap;word-break:break-all;line-height:1.5;" },
-      });
-      row.createEl("span", { text: rule.ok ? "✓ " : "✗ " });
-      row.createEl("code", { text: rule.source });
-      if (rule.error) {
-        row.createEl("span", { text: `  ← 正则本身有错：${rule.error}` });
-      }
-    }
-
-    contentEl.createEl("h4", { text: "实际值预览" });
-    contentEl.createEl("p", {
-      cls: "setting-item-description",
-      text: `校验目标：${this.result.targetDescription}；实际长度 ${this.result.text.length} 字符。`,
-    });
-    contentEl.createEl("pre", {
-      text: this.result.text,
-      attr: {
-        style: "white-space:pre-wrap;word-break:break-all;max-height:340px;overflow:auto;"
-          + "background:var(--background-secondary);padding:8px;border-radius:6px;font-size:12px;",
-      },
-    });
-  }
-
-  onClose() {
-    this.contentEl.empty();
   }
 }
 
@@ -5535,12 +3973,29 @@ class PendingNotesDashboardModal extends Modal {
     contentEl.empty();
     contentEl.createEl("h2", { text: "待更新笔记 / 文件夹识别" });
     const intro = contentEl.createEl("div", { cls: "ai-metadata-pending-intro" });
-    intro.setText("这里只负责「补充空数据」：按目录树列出白名单里缺失字段或字段为空的 Markdown，逐篇或按文件夹补全 7 项 AI 元数据。"
-      + "是否允许生成由全局的「元数据 status 校验」决定（见设置）；文章内的 ✨ 单字段按钮不受此限制。");
+    intro.setText(this.plugin.settings.statusDoneOnlyEnabled === true
+      ? "当前已启用 status 元数据校验：这里只统计并识别 frontmatter 中 status: done 的文章。undone、缺少 status 或其他状态不会进入批量队列；文章内四个 AI 字段的 ✨ 手动生成仍可使用。"
+      : "当前批量范围为全部文章：像 Obsidian 文件管理器一样展开 00_docs 子文件夹。每个文件夹右侧的“识别”按钮处理该文件夹及其子文件夹中的待更新 Markdown；文章内四个 AI 字段的 ✨ 只更新对应字段。");
 
     const toolbar = contentEl.createDiv({ cls: "ai-metadata-pending-toolbar" });
+    const expandButton = toolbar.createEl("button", { text: "展开待更新目录" });
+    expandButton.addEventListener("click", () => {
+      if (!this.lastData) return;
+      for (const group of this.lastData.folders) {
+        if (group.recursivePending > 0 || group.recursiveEmptySkipped > 0) this.expandedFolders.add(group.folder);
+      }
+      void this.render();
+    });
+    const collapseButton = toolbar.createEl("button", { text: "全部折叠" });
+    collapseButton.addEventListener("click", () => {
+      this.expandedFolders.clear();
+      this.expandedFolders.add(this.plugin.normalizeWhitelistFolder());
+      void this.render();
+    });
     const refreshButton = toolbar.createEl("button", { text: "重新统计", cls: "mod-cta" });
     refreshButton.addEventListener("click", () => void this.render());
+    const exportButton = toolbar.createEl("button", { text: "导出白名单目录" });
+    exportButton.addEventListener("click", () => void this.plugin.exportWhitelistFolder());
 
     if (this.plugin.manualFolderRun && !this.plugin.manualFolderRun.controller.signal.aborted) {
       const stopCurrentButton = toolbar.createEl("button", {
@@ -5717,49 +4172,28 @@ class PendingNotesDashboardModal extends Modal {
     const badges = head.createDiv({ cls: "ai-metadata-file-badges" });
     if (info.emptyBody) badges.createSpan({ text: "无正文", cls: "ai-metadata-pending-badge is-skipped" });
     else {
-      // 7 个字段一个都不能少：之前漏了 Take 与 QA，导致只缺这两项的笔记看不到任何徽章。
       if (!info.titleDone) badges.createSpan({ text: "AI Title", cls: "ai-metadata-pending-badge" });
       if (!info.summaryShortDone) badges.createSpan({ text: "Summary Short", cls: "ai-metadata-pending-badge" });
       if (!info.summaryLongDone) badges.createSpan({ text: "Summary Long", cls: "ai-metadata-pending-badge" });
       if (!info.tagsDone) badges.createSpan({ text: "Tags", cls: "ai-metadata-pending-badge" });
       if (!info.technicalDepthDone) badges.createSpan({ text: "Technical Depth", cls: "ai-metadata-pending-badge" });
-      if (!info.takeDone) badges.createSpan({ text: "Take", cls: "ai-metadata-pending-badge" });
-      if (!info.qaDone) badges.createSpan({ text: "QA", cls: "ai-metadata-pending-badge" });
     }
     row.createDiv({ cls: "ai-metadata-file-path", text: info.file.path });
     row.createDiv({ cls: "ai-metadata-file-preview", text: info.preview || "（无可预览正文）" });
-
-    // 逐篇操作：只补缺失字段（不会覆盖已有内容），并遵守 status: done 规则。
-    if (info.pending && !info.emptyBody) {
-      const actions = row.createDiv({ attr: { style: "display:flex;gap:8px;flex-wrap:wrap;margin-top:2px;" } });
-      const fillButton = actions.createEl("button", { cls: "ai-metadata-inline-action", text: "补全缺失字段" });
-      fillButton.setAttribute("title", "只生成这篇笔记中缺失的字段；已有内容的字段不会被动到");
-      fillButton.addEventListener("click", async () => {
+    if (info.lastError) {
+      row.createDiv({ cls: "ai-metadata-file-error", text: `上次错误：${info.lastError}` });
+      const retryButton = row.createEl("button", { cls: "ai-metadata-inline-action", text: "重试此笔记" });
+      retryButton.addEventListener("click", async () => {
         if (this.loading) return;
         this.loading = true;
-        fillButton.disabled = true;
-        fillButton.setText("处理中…");
+        retryButton.disabled = true;
+        retryButton.setText("重试中…");
         try {
           await this.plugin.retrySingleMetadataFile(info.file, true);
         } finally {
           this.loading = false;
           if (this.contentEl.isConnected) await this.render();
         }
-      });
-    }
-
-    if (info.lastError) {
-      const errRow = row.createDiv({ cls: "ai-metadata-file-error" });
-      errRow.createSpan({ text: `上次错误：${info.lastError}` });
-      const copyError = errRow.createEl("button", { text: "复制", attr: { type: "button", style: "font-size:11px;padding:1px 6px;margin-left:6px;" } });
-      copyError.addEventListener("click", async (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const text = [`文件：${info.file.path}`, `类型：${info.lastErrorType || "ERROR"}`, `错误：${info.lastError}`]
-          .concat(info.lastRawModelOutput ? ["", "模型原始输出：", info.lastRawModelOutput] : [])
-          .join("\n");
-        const ok = await this.plugin.copyTextToClipboard(text);
-        new Notice(ok ? "xyblue135 私人·AI 元数据：已复制该笔记的错误信息" : "xyblue135 私人·AI 元数据：复制失败");
       });
       if (info.lastRawModelOutput) {
         const raw = row.createEl("details", { cls: "ai-metadata-raw-output" });

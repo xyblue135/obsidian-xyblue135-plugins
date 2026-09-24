@@ -18,6 +18,8 @@
     "requestIntervalSeconds": 30,
     "experimentalCombinedRequestEnabled": false,
     "feedMetadataToAiEnabled": false,
+    "feedTitleToAiEnabled": true,
+    "clearFieldsBeforeRunEnabled": true,
     "structuredJsonModeEnabled": true,
     "jsonRepairEnabled": true,
     "statusBarEnabled": true,
@@ -27,20 +29,54 @@
     "technicalDepthHarnessEnabled": true,
     "tagCaseNormalizationEnabled": true,
     "technicalTagCanonicalList": "Linux\nPrometheus\nGrafana\nDocker\nKubernetes\nK8s\nNginx\nMySQL\nPostgreSQL\nRedis\nMongoDB\nGit\nGitHub\nGitLab\nJenkins\nAnsible\nTerraform\nPython\nJava\nJavaScript\nTypeScript\nNodeJS\nReact\nVue\nAngular\nSpring\nSpringBoot\nOpenAI\nChatGPT\nObsidian\nSelenium\nFFmpeg\nFluent\nUnity\nYOLO\nPyTorch\nTensorFlow\nCUDA\nOpenCV\nNumPy\nPandas\nScikitLearn\nREST\nHTTP\nHTTPS\nTCP\nUDP\nDNS\nSSH\nTLS\nJSON\nYAML\nXML\nHTML\nCSS\nSQL\nNoSQL\nAPI\nSDK\nCI\nCD\nDevOps\nMLOps\nLLM\nRAG\nNacos\nZabbix\nLoki\nPromtail\nSkyWalking",
-    "summaryShortHarness": "语言：中文。\n用途：生成 summary_short，用于文章列表、搜索结果、悬浮预览和快速识别主题。\n形式：只输出一个自然、完整的单句摘要，不换行。\n内容：优先保留核心对象或技术主题、核心问题，以及最主要的解决方案、结论或知识点；保留最有辨识度的技术名词和关键参数，但不要展开完整排查过程。\n表达：必须是自然中文，不要写成电报体、日志体、参数串或关键词堆砌；不要为了压缩大量使用 /、+、→ 等符号代替正常语言关系。\n不要使用‘本文介绍了’、‘这篇文章讲了’、‘这篇笔记主要是’等套话；不要 Markdown、标题、引号或前后解释。\n长度：不得超过 {{summaryShortMaxChars}} 个字符；正文信息充足时，尽量使用上限的 70%～90%，但不要为了凑长度加入重复信息。",
-    "summaryLongHarness": "语言：中文。\n用途：生成 summary_long，用于理解整篇文章结构，并服务于 AI 分类、技术含量判断、搜索、相关文章推荐、RAG 和文章排序。\n形式：输出一段自然、完整的内容摘要，可使用 2～3 个完整句子，但不要换行。\n目标：生成‘文章内容总览’，而不是最终结论、技术速记或参数清单；读者只阅读摘要，就应大致知道文章的背景问题、关键排查或分析过程、主要技术方案、涉及的重要技术点，以及最终结论、限制或待验证问题。\n内容要求：正文中存在时，应尽可能覆盖核心对象/背景问题、关键实验或测试数据、判断依据与因果关系、最终技术方案、关键参数/组件/接口/算法/工具，以及重要注意事项、风险、限制、异常现象或待验证问题。\n不要只写‘问题 + 最终方案’；如果正文包含排查、测试、选型、实现和风险分析，应尽量把这些阶段都压缩进摘要。\n优先保留具有检索价值和技术辨识度的具体信息，例如型号、技术名词、接口名称、关键数值、测试结果、核心模块和异常现象；不要用‘进行了测试’‘采用相关方法’等模糊概括替代具体内容。\n表达：使用自然、完整、连贯的中文叙述，不要写成电报体、日志体、关键词堆叠或参数串；避免大量使用 /、+、→ 等符号代替正常语言关系。允许使用‘针对……’‘通过……发现……’‘进一步……’‘同时……’等连接方式。\n不要使用‘本文介绍了’、‘这篇文章介绍了’、‘这篇笔记讲了’等空泛开场；不要 Markdown、标题、引号或前后解释。\n长度：不得超过 {{summaryLongMaxChars}} 个字符；正文信息充足时，尽量使用上限的 75%～95%；如果内容过多，优先压缩措辞，而不是删除关键技术阶段。\n禁止输出类似‘设备故障，测试A/B得出结论；使用模块X、Y完成改造，信号Z待验证’这种高度压缩的技术速记，必须改写成自然的文章概述。",
-    "tagsHarness": "最多输出 {{maxTags}} 个互不重复的标签 value；优先质量，不要为了凑数量加入泛化、重复或低信息量标签；不得使用 skill/Linux、domain/云计算 这类层级前缀。\nweight 主要表示‘技术专有性 + 对检索这篇笔记的区分度’，不是泛泛的主题相关度。\n具体技术实体优先高权重：软件/工具、框架、库、协议、API、算法、数据结构、数据库、系统组件、具体文件或媒体格式等，应优先于宽泛动作或用途词。\n当具体技术词和泛化概念表达相近时，具体技术词必须明显更高。例如 FFmpeg≈0.98，视频转码≈0.72，格式转换≈0.45；不要让‘格式转换’这类泛词压过 FFmpeg。\n建议权重层级：核心具体技术 0.90~1.00；具体机制/算法/协议/格式 0.80~0.94；明确任务或领域 0.60~0.79；泛化动作/用途 0.30~0.59。\n避免同义词、近义重复、上下位概念重复占位；在最多 {{maxTags}} 个标签内尽量覆盖不同的高信息量技术维度。",
-    "technicalDepthHarness": "你是一名技术内容评审员。请完整阅读下面提供的技术文章全文，对文章本身的技术深度AI_technical_depth进行评分。\n\n衡量的是技术机制深度、工程实现复杂度、系统复杂度、分析验证强度以及所需前置知识密度。\n它不是：\n- 文章写得好不好\n- 文章字数多少\n- 教程是否详细\n- 对某个特定读者来说难不难\n- 文章是否有很多代码、命令或截图\n- 文章是否有很多专业术语\n因此：\n一篇非常详细的软件安装教程、命令大全、工具使用说明，即使有上万字，也可能只有 10～35 分。\n一篇只有两三千字，但真正分析了协议、内核、编译器、数据库内部机制、分布式一致性、性能瓶颈或复杂故障根因的文章，可以达到 60～85 分。\n\ntechnical_depth 为 0～100 的整数。\n不要根据当前文章集合进行归一化。\n不要把 “当前最难文章” 强行设置为 100。\n100 分代表固定的专家级 / 研究级技术深度，因此绝大多数普通技术博客都不应该达到 90 分以上。\n\n## 五个评分维度\n### 1. 机制深度：0～28 分\n判断文章是否真正解释 “为什么” 和 “内部如何工作”。\n重点包括：\n- 底层原理\n- 内部机制\n- 数据结构\n- 算法\n- 协议\n- 内核行为\n- 调度机制\n- 编译过程\n- 存储机制\n- 网络机制\n- 分布式机制\n- 数据流或控制流\n- 源码级行为\n仅告诉读者 “执行什么命令”“在哪里点击”“修改什么配置”，不能获得高机制分。\n### 2. 工程实现：0～24 分\n判断文章是否包含真实、有复杂度的技术实现。\n重点包括：\n- 多组件协作\n- 完整部署\n- 架构搭建\n- 编译\n- 二次开发\n- 复杂配置\n- 自动化\n- 系统集成\n- 源码修改\n- 性能调优\n- 工程取舍\n注意大量复制粘贴命令并不等于工程复杂度高。\n单纯安装软件、配置环境变量、启动服务、修改少量配置文件，应限制在较低分数。\n### 3. 分析与验证：0～19 分\n判断文章是否形成真正的技术分析闭环。\n例如：\n现象\n→ 收集证据\n→ 提出假设\n→ 日志 / 抓包 / 性能指标 / 源码分析\n→ 排除错误方向\n→ 定位根因\n→ 修改方案\n→ 再次验证\n以下内容可以提高本项评分：\n- benchmark\n- 性能测试\n- A/B 对比\n- Wireshark\n- tcpdump\n- perf\n- strace\n- 日志分析\n- 实验\n- 指标变化\n- 故障复现\n- 多方案比较\n如果文章只是给出最终解决办法，没有分析过程，本项不要给高分。\n### 4. 系统复杂度：0～17 分\n判断问题涉及多少技术层次以及它们之间是否存在真实关联。\n例如：\n应用\n→ 中间件\n→ 操作系统\n→ 网络协议\n→ 驱动\n→ 硬件\n或者：客户端\n→ 网关\n→ 服务发现\n→ Raft\n→ 存储\n→ 网络\n跨组件、跨系统、跨层分析通常比单一工具的使用具有更高技术深度。\n但不要因为文章提到了很多产品名称就自动加分，必须存在实际技术关系。\n### 5. 前置知识密度：0～12 分\n判断读者真正理解文章需要多少技术基础。\n例如需要理解：\n- 操作系统\n- 网络\n- 数据库\n- 数据结构\n- 编译原理\n- 分布式系统\n- GPU/CUDA\n- 存储\n- Linux 内核\n- 数学或机器学习理论\n单纯因为术语很多，不代表前置知识密度高。\n## 分数区间标准\n### 0～19：基础信息 / 简单操作\n典型内容：\n- 单个命令说明\n- 软件是什么\n- 简单参数说明\n- 基础知识点\n- 简单问题记录\n- UI 操作\n- 软件安装步骤\n### 20～39：基础技术教程\n典型内容：\n- 常规 Linux 教程\n- Docker 基础操作\n- 普通软件部署\n- 基本配置\n- 常见故障解决\n- API 基础使用\n- 比较完整但机制较浅的教程\n文章可以写得非常完整，但核心仍然是 “怎么使用”。\n### 40～59：中等技术深度\n典型内容：\n- 开始解释内部机制\n- 多组件配置\n- 较复杂部署\n- 有一定故障分析\n- 比较深入的数据库、Linux、网络、Docker/Kubernetes 教程\n- 带有部分原理和验证的工程实践\n### 60～74：高级技术\n典型内容：\n- 系统级故障排查\n- 完整性能分析\n- 跨组件问题\n- 编译与复杂构建\n- 分布式系统机制\n- 网络底层问题\n- 存储内部机制\n- 有明显 “证据 → 根因 → 修复 → 验证” 的分析闭环\n### 75～89：深度技术\n典型内容：\n- 跨多个技术层\n- 深入底层机制\n- 源码级或协议级分析\n- 高复杂度工程实现\n- 性能实验充分\n- 多种工具联合定位\n- 有较强技术取舍分析\n- 接近高级工程师 / 专家经验总结\n### 90～99：专家 / 研究级\n只有在文章同时具备多数以下特征时使用：\n- 很强的机制深度\n- 源码或算法层分析\n- 高复杂度系统问题\n- 严格实验或性能验证\n- 多方案比较\n- 明确技术权衡\n- 较强原创分析\n- 对已有方法有改进或新的工程发现\n不要因为文章 “看起来很厉害” 就给 90+。\n### 100\n极少使用。\n代表非常完整的专家级或研究级技术成果，通常已经接近：\n- 高质量研究论文\n- 极深入的原创系统研究\n- 完整架构设计 + 底层实现 + 实验验证\n- 对复杂技术问题具有明显原创贡献\n普通博客不需要存在 100 分文章。\n## 特别需要防止的误判\n### 长文章不等于高分\n50000 字的命令参考手册，可能只有 25～40 分。\n### 代码多不等于高分\n大量 Shell、YAML、Docker Compose 或配置文件只是实现步骤时，不应该自动获得高分。\n### 安装复杂不等于技术深\n“安装了很多依赖、踩了很多环境问题” 不代表文章达到高级技术深度。\n### 专业术语多不等于高分\n必须确认文章真正解释或使用了这些机制。\n### 知识类文章写得很好也不等于技术深\n如果主要是概念介绍、历史介绍、软件介绍、基础科普，应保持较低到中等评分。\n### 短文章也可能高分\n如果短文章准确解释了一个非常深入的核心机制，可以获得较高分数。\n## 评分要求\n阅读全文后再评分，不要只根据标题、摘要或开头判断。\n先在内部完成五个维度的判断，然后得到最终 technical_depth。\n最终分数必须是整数。\n相邻文章之间不必人为拉开差距；如果技术深度相近，可以得到相同分数。\n不要为了让分布看起来漂亮而修改分数。\n## 输出格式\n只输出得分 预留的位置就是得分的位置",
+    "summaryShortHarness": "语言：中文。\n用途：用于文章列表、搜索结果、悬浮预览和快速识别主题。\n形式：只输出一个自然、完整的单句摘要，不换行。\n内容：优先保留核心对象或技术主题、核心问题，以及最主要的解决方案、结论或知识点；保留最有辨识度的技术名词和关键参数，但不要展开完整排查过程。\n表达：必须是自然中文，不要写成电报体、日志体、参数串或关键词堆砌；不要为了压缩大量使用 /、+、→ 等符号代替正常语言关系。\n不要使用‘本文介绍了’、‘这篇文章讲了’、‘这篇笔记主要是’等套话；不要 Markdown、标题、引号或前后解释。\n要一两句话总结出来 不要超过100字符",
+    "summaryLongHarness": "语言：中文。\n用途：生成 summary_long，用于理解整篇文章结构，并服务于 AI 分类、技术含量判断、搜索、相关文章推荐、RAG 和文章排序。\n形式：输出一段自然、完整的内容摘要，可使用 2～3 个完整句子，但不要换行。\n目标：生成‘文章内容总览’，而不是最终结论、技术速记或参数清单；读者只阅读摘要，就应大致知道文章的背景问题、关键排查或分析过程、主要技术方案、涉及的重要技术点，以及最终结论、限制或待验证问题。\n内容要求：正文中存在时，应尽可能覆盖核心对象/背景问题、关键实验或测试数据、判断依据与因果关系、最终技术方案、关键参数/组件/接口/算法/工具，以及重要注意事项、风险、限制、异常现象或待验证问题。\n不要只写‘问题 + 最终方案’；如果正文包含排查、测试、选型、实现和风险分析，应尽量把这些阶段都压缩进摘要。\n优先保留具有检索价值和技术辨识度的具体信息，例如型号、技术名词、接口名称、关键数值、测试结果、核心模块和异常现象；不要用‘进行了测试’‘采用相关方法’等模糊概括替代具体内容。\n表达：使用自然、完整、连贯的中文叙述，不要写成电报体、日志体、关键词堆叠或参数串；避免大量使用 /、+、→ 等符号代替正常语言关系。允许使用‘针对……’‘通过……发现……’‘进一步……’‘同时……’等连接方式。\n不要使用‘本文介绍了’、‘这篇文章介绍了’、‘这篇笔记讲了’等空泛开场；不要 Markdown、标题、引号或前后解释。\n长度：如果内容过多，优先压缩措辞，而不是删除关键技术阶段。\n禁止输出类似‘设备故障，测试A/B得出结论；使用模块X、Y完成改造，信号Z待验证’这种高度压缩的技术速记，必须改写成自然的文章概述。\n不要超过300字符",
+    "tagsHarness": "最多输出5个互不重复的标签 value；在最多 5个标签内尽量覆盖不同的高信息量技术维度。优先质量，不要为了凑数量加入泛化、重复或低信息量标签；\n不允许超过5个标签 按照得分取前五个输出\n不得使用 skill/Linux、domain/云计算 这类层级前缀。\n当具体技术词和泛化概念表达相近时，具体技术词必须明显更高。例如 FFmpeg≈0.98，视频转码≈0.72，格式转换≈0.45；不要让‘格式转换’这类泛词压过 FFmpeg。\n建议权重层级：核心具体技术 0.90~1.00；具体机制/算法/协议/格式 0.80~0.94；明确任务或领域 0.60~0.79；泛化动作/用途 0.30~0.59。\n避免同义词、近义重复、上下位概念重复占位。\n",
+    "technicalDepthHarness": "角色：技术内容评审员\n任务：对输入技术文章的技术深度打0-100整数分\n\n【核心原则】\n1. 仅评估5个维度：机制深度、工程实现复杂度、系统复杂度、分析验证强度、前置知识密度\n2. 与文笔、字数、代码量、术语数量无关；纯操作教程、命令合集、安装步骤类不得高分\n3. 100分为固定专家级标尺，不对文章强行归一化，普通技术博客不超过90分\n4. 通读全文后评分，不得仅凭标题、摘要判断\n\n【评分维度（总分100）】\n1. 机制深度（28分）：考察底层原理与内部运行逻辑；仅讲操作命令、配置步骤不得高分\n2. 工程实现（24分）：考察多组件协作、架构部署、性能调优、工程取舍；单纯软件安装、基础配置为低分\n3. 分析与验证（19分）：考察是否形成完整分析闭环；仅给结论无推导验证过程不得高分\n4. 系统复杂度（17分）：考察跨技术层级的关联深度；仅罗列产品名称不加分\n5. 前置知识密度（12分）：考察理解内容所需的技术门槛；单纯术语堆砌不代表密度高\n\n【档位参考】\n0-19：基础信息/简单操作\n20-39：基础技术教程，核心为“怎么用”\n40-59：中等深度，含部分机制解释与故障分析\n60-74：高级技术，系统级分析、完整验证闭环\n75-89：深度技术，源码/协议级分析、跨多层级、充分实验验证\n90-99：专家/研究级，需同时具备源码分析、高复杂度系统、严格实验、强原创性\n100：极少使用，对应完整原创研究级成果\n\n【输出硬规则】\n仅输出最终得分的整数数字，禁止输出任何评分理由、维度拆分、解释说明类内容",
     "takeHarnessEnabled": true,
-    "takeHarness": "请阅读下面的技术笔记，以资深工程师和技术审稿人的视角进行锐评。\n\n要求：\n1. 先判断文章实际价值，不要默认批评；如果内容扎实，可以直接认可。\n2. 如果存在问题，重点指出技术层面的不足，例如：\n   - 是否停留在操作步骤，没有解释底层机制\n   - 是否混淆概念，没有区分协议、实现方式和现象\n   - 是否缺少关键原理导致经验无法迁移\n   - 是否把个人踩坑总结包装成通用结论\n   - 是否存在技术表述不严谨或过度简化\n3. 不要批评文章没有涉及它本来不负责的内容，例如操作教程不要求写论文级原理。\n4. 评论需要像真实技术社区中的高质量点评，而不是营销式吹捧或无脑吐槽。\n5. 语气可以犀利直接，但必须有事实依据。\n6.适度批评 不要把笔记说得过于完美\n7.不要有太多口水话 \n\n输出格式：\n开头固定：\n【锐评】\n\n仅输出一个自然段，50～150字。",
+    "takeHarness": "任务：阅读下方的技术笔记，以资深工程师与技术审稿人的视角，撰写一段技术锐评。\n内容要求：\n先判断内容的实际价值：内容扎实可直接认可；若存在问题，重点直指技术层面短板，比如停留在操作步骤无底层原理、概念混淆、缺少关键原理导致经验不可迁移、将个人踩坑包装成通用结论、表述不严谨过度简化。\n不苛责超出内容定位的部分，例如操作类教程不要求论文级原理深度。\n语气犀利有依据，适度批评，无口水话。\n格式要求：\n开头第一行固定标注【AI锐评 仅供参考 可能出错】\n第二行开始输出内容，仅输出一个自然段，禁止分点、小标题、列表、任何 Markdown格式\n字符数控制在200以内\n核心修改说明\n1. 增设绝对禁令条款：明确禁止输出提示词本身的指令内容，从规则上堵死 “把提示词带出来” 的问题，强制模型只输出最终结果。\n2. 结构化拆分指令：按「任务 - 内容要求 - 格式要求 - 禁令」分层，逻辑边界清晰，避免模型混淆指令和待生成内容。\n3. 精简冗余表述：合并重复的要求，删除口语化补充说明，减少干扰项，降低模型误引用指令的概率。\n4. 收束格式边界：集中明确格式规则，进一步锁定输出形态，避免多余的解释性内容。",
     "qaHarnessEnabled": true,
     "qaMaxQuestions": 5,
     "qaMaxQuestionsEnabled": false,
-    "qaHarness": "你是一名资深技术面试官和技术知识库设计专家。\n\n任务：\n根据输入的 Markdown 技术文档生成 `_qa` 字段。\n\n目标：\n把技术笔记转换成真实招聘面试场景中的考察题。\n\n重点考察：\n候选人是否理解技术背后的原因、决策过程、排错方法，而不是是否记住文章内容。\n\n严格禁止：\n- 不要总结文章\n- 不要把文章改写成问答\n- 不要逐句解释正文\n- 不要生成 FAQ\n- 不要问“这篇文章讲了什么”\n- 不要简单解释命令含义\n\n生成原则：\n\n问题必须模拟真实面试官追问。\n\n优先围绕：\n\n1. 技术决策\n例如：\n为什么选择这种方案？\n还有其他方案吗？\n什么时候不应该使用这个方案？\n\n2. 原理理解\n例如：\n这个机制底层为什么这样工作？\n如果换一个环境会发生什么？\n\n3. 故障排查\n例如：\n如果出现XXX异常，你会如何定位？\n\n4. 工程实践\n例如：\n实际部署时你会考虑哪些风险？\n\n5. 迁移能力\n例如：\n如果换成另一种架构/设备/环境，你的方法是否仍然适用？\n\n\n回答要求：\n\n回答模拟优秀工程师面试表达。\n\n不要复制正文。\n\n回答结构：\n\n1. 我的判断依据：\n说明为什么这么判断。\n\n2. 我的排查或实现思路：\n说明实际操作流程。\n\n3. 关键风险：\n说明容易踩坑的位置。\n\n\n可以使用正文中的：\n- 命令\n- 配置\n- 参数\n- 错误现象\n\n但是必须服务于回答，不允许机械重复。\n\n\n真实性要求：\n\n不要虚构：\n- 不存在的项目经历\n- 文档没有出现的新技术\n- 未验证的解决方案\n\n允许使用：\n“实际工作中遇到类似问题时，我通常会……”\n\n不要使用：\n“我在某某公司项目中……”\n\n数量：\n根据复杂度生成：\n简单：2-3题\n中等：4-6题\n复杂：6-10题\n\n\n输出：\n\n只输出 YAML。\n\n格式：\n\n_qa:\n  - Q: \"\"\n    A: \"\"\n\n禁止输出：\nMarkdown\n代码块\n解释文字\n思考过程\n<|channel|>\nthought\nanalysis\n等内部标签。",
+    "qaHarness": "你是资深技术面试官与技术知识库设计专家。\n\n【最高优先级：输出格式铁律（违反直接不合格，可逐条秒校验）】\n1. 绝对禁止出现「Q:」「A:」字符，禁止问题和回答放在同一行\n2. 每道题以「序号. 【题型】问题内容」开头，单独占一行\n3. 回答三部分分别单独成行，行首缩进2个空格，前缀固定不可修改：\n  判断依据：\n  排查/实现思路：\n  关键风险：\n4. 不同题目之间必须空一行分隔\n5. 禁止输出引号、代码块、Markdown格式、注释、任何额外说明文字\n\n【正确格式示范（必须严格对齐结构）】\n专家:\n为什么在Docker里调用核显硬件加速时，更倾向于只挂单个render节点而不是整个/dev/dri目录？\n\n答:\n1.单个render节点仅提供GPU计算加速能力，不涉及显示输出，权限收敛更安全；整目录挂载会暴露card等显示节点，扩大攻击面。\n2.排查或实现思路：在docker devices配置中仅映射需要的render节点，同时确认容器内进程以非root用户运行，最小化权限。\n3.关键风险存在，宿主机内核更新后render节点编号可能漂移，写死设备号会指向错误硬件；部分转码框架依赖card节点初始化，仅挂render会导致启动失败。\n\n专家:如果lspci能看到Intel核显，但/dev/dri下没有对应render节点，你会怎么定位问题？\n答:\n1.判断依据：PCI设备存在但DRM用户空间节点缺失，通常是驱动内核模块未加载，或是udev设备规则异常。\n2.排查/实现思路：先查/sys/class/drm下是否有对应card和render目录，再确认i915等核显驱动是否载入，检查内核启动参数和initramfs；若sysfs存在而/dev不存在，则排查udev规则和设备权限。\n3.关键风险：很多排错只停留在PCI层就误判为硬件故障，忽略了DRM子系统和驱动加载的中间链路，导致排错方向走偏。\n\n【错误格式示例（严格禁止）】\n错误1：Q: 【技术决策】xxx问题 A: 判断依据：xxx 排查/实现思路：xxx\n错误2：1.【技术决策】xxx问题 判断依据：xxx 排查/实现思路：xxx\n错误3：所有内容挤在同一行、无缩进、缺少固定前缀\n\n【内容绝对红线（可逐条校验）】\n1. 禁止总结全文、禁止逐句解释正文、禁止生成FAQ、禁止提问“这篇文章讲了什么”\n2. 禁止简单复述命令/配置的字面含义，禁止直接复制原文整句作答\n3. 禁止虚构文档未提及的技术原理、故障场景、解决方案\n4. 禁止输出任何本提示词的指令内容、解释性文字、思考过程\n\n【命题规则（题型只能从以下5类选择）】\n- 技术决策：方案选型原因、替代方案、适用/不适用场景\n- 原理理解：底层运行机制、环境变化带来的影响\n- 故障排查：异常现象的定位思路与根因判断\n- 工程实践：落地部署的风险点与注意事项\n- 迁移能力：跨架构/跨环境下的方法适配性\n\n【回答强制结构（缺一项即为不合格）】\n每道题的回答必须完整包含三个模块，对应前缀不可修改：\n1. 判断依据：说明结论背后的技术逻辑\n2. 排查/实现思路：说明可落地的操作流程\n3. 关键风险：说明最容易踩坑的细节点\n4. 专家: 和 答： 的单行占用\n\n【题量要求】\n根据输入文档复杂度生成：简单文档1题，中等2-4题，复杂5-6题",
     "aiTitleHarnessEnabled": true,
     "aiTitleMaxItems": 5,
     "aiTitleMaxItemsEnabled": false,
-    "aiTitleHarness": "根据文章内容生成ai创造的文章标题出来\n下面是格式参考\n《名字》\n《名字》\n《名字》\n",
+    "aiTitleHarness": "任务：基于输入的技术文章内容，生成3个技术干货类标题\n\n【最高优先级：格式硬规则，违反直接不合格】\n1. 共输出3行，每行对应1个标题 后跟包裹《》的标题文本\n2. 禁止给任何内容加双引号，禁止额外添加根键、注释、解释文字\n3. 标题内禁用冒号、问号、感叹号，无副标题、无设问句式\n4. 仅输出3行标题内容，无任何多余文本\n\n【标题要求】\n纯名词短语结构，紧扣核心技术主题，体现干货属性，无冗余修饰\n\n【正确示例】\n- 《标题一》\n- 《标题二》\n- 《标题三》",
+    "formatChecks": {
+      "ai_title": {
+        "enabled": true,
+        "rules": "# 校验目标：AI_title 数组每一项占一行拼接\n# 恰好 3 行；每行必须被《》完整包裹；不允许多余空行\n/^(?:《[^\\n《》]+》\\n){2}《[^\\n《》]+》$/"
+      },
+      "tags": {
+        "enabled": true,
+        "rules": "# 校验目标：AI_tags 数组每一项占一行拼接\n# 数量 1~5 个，每个标签非空\n/^[^\\n]+(?:\\n[^\\n]+){0,4}$/"
+      },
+      "summary_short": {
+        "enabled": true,
+        "rules": "# 校验目标：AI_summary_short 原始字符串\n# 不超过 100 字符\n/^[\\s\\S]{0,100}$/"
+      },
+      "summary_long": {
+        "enabled": true,
+        "rules": "# 校验目标：AI_summary_long 原始字符串\n# 不超过 300 字符\n/^[\\s\\S]{0,300}$/"
+      },
+      "technical_depth": {
+        "enabled": true,
+        "rules": "# 校验目标：AI_technical_depth 值的字符串形式\n# 0~100 的整数\n/^(?:100|[1-9]?\\d)$/"
+      },
+      "take": {
+        "enabled": true,
+        "rules": "# 校验目标：AI_take 原始字符串\n# 第一条：第一行必须是该标注，不允许别的词\n/^【AI锐评 仅供参考 可能出错】\\n/\n# 第二条：整体不超过 200 字符\n/^[\\s\\S]{0,200}$/"
+      },
+      "qa": {
+        "enabled": true,
+        "rules": "# 校验目标：AI_qa 原始字符串\n# 第一条：第一行必须是「专家:」\n/^专家:\\n/\n# 第二条：第三行必须是空行\n/^(?:[^\\n]*\\n){2}\\n/\n# 第三条：第四行必须以「答:」开头\n/^(?:[^\\n]*\\n){3}答:/"
+      }
+    },
+    "logMaxEntries": 300,
+    "logRetentionDays": 3,
+    "metadataKeyOrder": "AI_title\nAI_tags\nAI_summary_short\nAI_summary_long\nAI_technical_depth\nAI_take\nAI_qa",
+    "inspectionIntervalSeconds": 5,
     "summaryNaturalOverviewMigratedV057": true
   },
   "state": {
@@ -201,10 +237,6 @@
         "lastError": "API 502: {\"error\":{\"message\":\"All 4 routed attempt(s) failed with upstream provider errors (error ×4) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
         "lastErrorType": "ERROR"
       },
-      "00_docs/01运维_0网络/网卡配置/【常用网络工具】【ethtool】【ip l】【ip n】【ip a】【ip r】.md": {
-        "lastError": "API 502: {\"error\":{\"message\":\"All 8 routed attempt(s) failed with upstream provider errors (error ×7, rate_limited ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provide",
-        "lastErrorType": "ERROR"
-      },
       "00_docs/01运维_0网络/网卡配置/【ip l】ip link的UP和LOWER_UP和state-UP的区别.md": {
         "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
         "lastErrorType": "ERROR"
@@ -215,10 +247,6 @@
       },
       "00_docs/01运维_0网络/网卡配置/【ip l】ip -s link.md": {
         "lastError": "API 502: {\"error\":{\"message\":\"All 8 routed attempt(s) failed with upstream provider errors (error ×7, rate_limited ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provide",
-        "lastErrorType": "ERROR"
-      },
-      "00_docs/01运维_0网络/网卡配置/【ip l】ip -s link的qlen队列长度决定的skb缓冲区的skb是什么.md": {
-        "lastError": "API 502: {\"error\":{\"message\":\"All 7 routed attempt(s) failed with upstream provider errors (error ×6, rate_limited ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provide",
         "lastErrorType": "ERROR"
       },
       "00_docs/01运维_0网络/网卡配置/【ip l】ip -d link的混杂模式promiscuity和全多播模式allmulti的说明.md": {
@@ -321,10 +349,6 @@
         "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×1, timeout ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider sta",
         "lastErrorType": "ERROR"
       },
-      "00_docs/Y_常用小知识_软件/字符集&&编码字符集ASCll和GBK和Unicode_UTF-8_UTF-32.md": {
-        "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attem",
-        "lastErrorType": "ERROR"
-      },
       "00_docs/Y_常用小知识_软件/关于win的winutil工具.md": {
         "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (timeout ×1, upstream_error ×1) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check pro",
         "lastErrorType": "ERROR"
@@ -417,6 +441,800 @@
         "lastError": "API 502: {\"error\":{\"message\":\"All 2 routed attempt(s) failed with upstream provider errors (error ×2) (stopped early: retry time budget 45s exceeded — one failover hop is always allowed, and past that the budget stops starting further retries and cancels an attempt still waiting on its first byte; raise FALLBACK_TIME_BUDGET_MS or the fallback_time_budget_ms setting to allow a longer failover chain). This is a provider-side failure, not a problem with your request; retry, or check provider status. Attempt",
         "lastErrorType": "ERROR"
       }
-    }
+    },
+    "logs": [
+      {
+        "at": 1790233706459,
+        "level": "info",
+        "message": "已写入：take",
+        "file": "00_docs/音视频_ffmpeg/编译相关/编译ffmpeg_gpu版本【必须要x64 Native Tools for VS2022 再 切换powershell 不然编译出来也是有问题的】.md",
+        "phase": "take",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790233740067,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/音视频_ffmpeg/编译相关/编译ffmpeg-cpu版本【必须要x64 Native Tools for VS2022 再 切换powershell 不然编译出来也是有问题的】.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790234231056,
+        "level": "info",
+        "message": "插件已加载（v0.7.2）；日志上限 300 条，保留 3 天",
+        "file": "",
+        "phase": "",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790234836479,
+        "level": "info",
+        "message": "插件已加载（v0.7.2）；日志上限 300 条，保留 3 天",
+        "file": "",
+        "phase": "",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235012971,
+        "level": "info",
+        "message": "已写入：ai_title + take + qa",
+        "file": "00_docs/运维_驱动-重做系统-引导/驱动类/老主板借助pice转nvme和DUET和Refind实现给主板添加驱动以运行m2固态.md",
+        "phase": "ai_title + take + qa",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235095719,
+        "level": "info",
+        "message": "已写入：ai_title + take + qa",
+        "file": "00_docs/运维_驱动-重做系统-引导/系统类/用PE重装.md",
+        "phase": "ai_title + take + qa",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235362149,
+        "level": "info",
+        "message": "插件已加载（v0.7.2）；日志上限 300 条，保留 3 天",
+        "file": "",
+        "phase": "",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235440341,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/音视频_ffmpeg/编译相关/编译ffmpeg-cpu版本【必须要x64 Native Tools for VS2022 再 切换powershell 不然编译出来也是有问题的】.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235473853,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/音视频_ffmpeg/编译相关/win和linux下安装编译版本ffmpeg.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235507996,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/音视频_ffmpeg/编译相关/FFmpeg添加ffplay和DLL模块.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235542679,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/音视频_ffmpeg/ffmpeg的命令使用.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235575351,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/音视频_ffmpeg/ffmpeg使用py批量压制hevc格式.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235608437,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/音视频_ffmpeg/00_简单介绍ffmpeg.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235641470,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_驱动-重做系统-引导/驱动类/老主板借助pice转nvme和DUET和Refind实现给主板添加驱动以运行m2固态.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235674559,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_驱动-重做系统-引导/系统类/如何安装Win+Linux双系统.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235707869,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_驱动-重做系统-引导/系统类/关于liveCD和liveUSB.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235741469,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_驱动-重做系统-引导/系统引导/物理迁移硬盘系统导致BCD错误.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235774503,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_驱动-重做系统-引导/系统引导/关于双系统系统的文件结构tree.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235807047,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_驱动-重做系统-引导/系统引导/关于linux的boot为何使用vfat.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235840419,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_驱动-重做系统-引导/系统引导/win的BCD对比linux的grub.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235873195,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_驱动-重做系统-引导/系统引导/legacy_bios对于UEFIMBR主引导记录对比GPT分区表.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235907351,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_驱动-重做系统-引导/系统引导/Legacy-UEFI和MBR-GPT_装机配对完全教程.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235941328,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/运维_驱动-重做系统-引导/救援类/linux的救援模式以及对grub访问设置加密.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790235974579,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/运维_驱动-重做系统-引导/救援类/IPMI是服务器失联后的远程救援通道.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236007584,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/文件系统&格式分区/软路由如何完全利用NAND闪存的存储空间.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236040036,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/文件系统&格式分区/正确创建使用删除swap分区和文件.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236073874,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/文件系统&格式分区/对比NOR闪存和NAND闪存.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236107522,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/文件系统&格式分区/存储介质RAW错误处理.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236140259,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/文件系统&格式分区/关于虚拟磁盘vhdx和vmdk不会自动缩容的解决方案.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236173415,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/文件系统&格式分区/为何采用MTD_NAND闪存而非传统SSD.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236206659,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/文件系统&格式分区/为什么路由器选择JFFS2或者UBIFS而不是ext4.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236239484,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/文件系统&格式分区/usb对比nvme.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236272422,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/文件系统&格式分区/squashfs（只读）和tmpfs（可写）文件系统.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236305007,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/文件系统&格式分区/SATA控制器的AHCI和IDE_模式.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236338382,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/文件系统&格式分区/overlay文件系统.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236371340,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/文件系统&格式分区/LVM逻辑卷管理层及其风险和扩展.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236404565,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/文件系统&格式分区/Linux下使用dd命令进行挂载.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236437702,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/存储类命令&知识/检查硬盘smart健康情况.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236470186,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/存储类命令&知识/如何拍摄系统快照和备份.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236503244,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/存储类命令&知识/关于虚拟硬盘的格式.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236536200,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/存储类命令&知识/linux的df-和lsblk-的参数说明.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236569000,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/运维_存储命令-文件系统-分区-日志/存储类命令&知识/Linux下的硬盘速率及其稳定性监测工具.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236602214,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/Z_娱乐_game/00_其他游戏/Docker部署帕鲁服务器.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236635197,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/Z_娱乐_game/00_三角洲/三角洲虚拟化报错处理.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236668268,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/Z_娱乐_game/00_三角洲/三角洲和docker的冲突.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236701333,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/Z_娱乐_game/00_Minecraft/py快速过滤区分客户端服务端模组.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236734140,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/Z_nvidia/驱动类/显卡驱动版本选择：高版本未必最佳-优先选用成熟分支.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236767731,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/Z_nvidia/驱动类/Linux安装nvidia生态环境【第三次同步更新】.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236800969,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/Z_nvidia/驱动类/linux卸载nvidia驱动-安装其他版本.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236834292,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/Z_nvidia/屏幕类/NVIDIA_Optimus技术导致GDM启动失败.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236876107,
+        "level": "info",
+        "message": "已写入：qa",
+        "file": "00_docs/Z_nvidia/屏幕类/linux下的n卡如何省电.md",
+        "phase": "qa",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236909240,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/Y_常用小知识_软件/音乐文件夹打开过慢.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236942339,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/Y_常用小知识_软件/重做系统后无法删除的文件.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790236975383,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/Y_常用小知识_软件/竖屏显示器旋转方向问题.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790237008340,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/Y_常用小知识_软件/直链_磁力_种子_BT_PT.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790237041577,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/Y_常用小知识_软件/用户账户控制设置的等级.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790237074407,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/Y_常用小知识_软件/添加开始菜单搜索.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790237638499,
+        "level": "info",
+        "message": "已写入：take",
+        "file": "00_docs/音视频_ffmpeg/编译相关/编译ffmpeg-cpu版本【必须要x64 Native Tools for VS2022 再 切换powershell 不然编译出来也是有问题的】.md",
+        "phase": "take",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790237671728,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/音视频_ffmpeg/编译相关/win和linux下安装编译版本ffmpeg.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790237704413,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/音视频_ffmpeg/编译相关/FFmpeg添加ffplay和DLL模块.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790237739322,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/音视频_ffmpeg/ffmpeg的命令使用.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790237774048,
+        "level": "info",
+        "message": "已写入：take",
+        "file": "00_docs/音视频_ffmpeg/ffmpeg使用py批量压制hevc格式.md",
+        "phase": "take",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790237808307,
+        "level": "info",
+        "message": "已写入：take",
+        "file": "00_docs/音视频_ffmpeg/00_简单介绍ffmpeg.md",
+        "phase": "take",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790237843044,
+        "level": "info",
+        "message": "已写入：take",
+        "file": "00_docs/运维_驱动-重做系统-引导/救援类/linux的救援模式以及对grub访问设置加密.md",
+        "phase": "take",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790237877516,
+        "level": "info",
+        "message": "已写入：take",
+        "file": "00_docs/运维_驱动-重做系统-引导/救援类/IPMI是服务器失联后的远程救援通道.md",
+        "phase": "take",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790237920223,
+        "level": "info",
+        "message": "已写入：qa",
+        "file": "00_docs/Z_nvidia/屏幕类/NVIDIA_Optimus技术导致GDM启动失败.md",
+        "phase": "qa",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790237954064,
+        "level": "info",
+        "message": "已写入：take",
+        "file": "00_docs/Y_常用小知识_软件/音乐文件夹打开过慢.md",
+        "phase": "take",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790237988222,
+        "level": "info",
+        "message": "已写入：take",
+        "file": "00_docs/Y_常用小知识_软件/重做系统后无法删除的文件.md",
+        "phase": "take",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238022876,
+        "level": "info",
+        "message": "已写入：take",
+        "file": "00_docs/Y_常用小知识_软件/竖屏显示器旋转方向问题.md",
+        "phase": "take",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238057430,
+        "level": "info",
+        "message": "已写入：take",
+        "file": "00_docs/Y_常用小知识_软件/直链_磁力_种子_BT_PT.md",
+        "phase": "take",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238091052,
+        "level": "info",
+        "message": "已写入：take",
+        "file": "00_docs/Y_常用小知识_软件/用户账户控制设置的等级.md",
+        "phase": "take",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238125107,
+        "level": "info",
+        "message": "已写入：take",
+        "file": "00_docs/Y_常用小知识_软件/添加开始菜单搜索.md",
+        "phase": "take",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238158545,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/Y_常用小知识_软件/有趣的Unicode.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238191455,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/Y_常用小知识_软件/微信的聊天备份.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238224017,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/Y_常用小知识_软件/字符集&&编码字符集ASCll和GBK和Unicode_UTF-8_UTF-32.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238257360,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/Y_常用小知识_软件/修改win的dos编码.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238290342,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/Y_常用小知识_软件/一次电脑黑屏重启的排障.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238323306,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/Y_常用小知识_软件/win的winget.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238356732,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/Y_常用小知识_软件/win常用命令.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238389397,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/Y_常用小知识_软件/usb接口总是反复重启排查.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238422262,
+        "level": "info",
+        "message": "已写入：ai_title",
+        "file": "00_docs/Y_常用小知识_软件/CPU的多线程和超线程.md",
+        "phase": "ai_title",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238455617,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/Y_office/关于BOM头的介绍和使用.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238488035,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/0_个人信息-工作经历/上海欣诺通信股份有限公司/生产保障/日常巡检体系.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238521272,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/0_个人信息-工作经历/上海欣诺通信股份有限公司/生产保障/应急预案与故障演练.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238554588,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/0_个人信息-工作经历/上海欣诺通信股份有限公司/生产保障/容量规划与重大保障.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238587338,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/0_个人信息-工作经历/上海欣诺通信股份有限公司/生产保障/告警治理与日志集.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238620569,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/0_个人信息-工作经历/上海欣诺通信股份有限公司/效率处理/轻量告警系统ntfy一行curl发推送.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      },
+      {
+        "at": 1790238654192,
+        "level": "info",
+        "message": "已写入：tags",
+        "file": "00_docs/0_个人信息-工作经历/上海欣诺通信股份有限公司/效率处理/基于Python与ADB的移动网网元自动切换及IPv6归属校验.md",
+        "phase": "tags",
+        "errorType": "",
+        "raw": ""
+      }
+    ]
   }
 }

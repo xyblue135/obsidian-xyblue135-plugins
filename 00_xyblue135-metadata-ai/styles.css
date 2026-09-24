@@ -5,12 +5,15 @@
  */
 .metadata-property.ai-metadata-enabled-row {
   position: relative;
-  padding-right: 34px;
+  /* 右侧要给两个按钮留位置：✨ 生成（right 4px）+ ✓ 格式校验（right 34px） */
+  padding-right: 64px;
 }
 
-.ai-metadata-property-button {
+/* ✨ 生成按钮与 ✓ 格式校验按钮共用同一套定位与外观，
+   两者都是 .metadata-property 的直接子元素（同一层级），并排贴在该行右侧。 */
+.ai-metadata-property-button,
+.ai-metadata-check-button {
   position: absolute;
-  right: 4px;
   top: 50%;
   transform: translateY(-50%);
   width: 26px;
@@ -26,9 +29,20 @@
   transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
 }
 
+.ai-metadata-property-button {
+  right: 4px;
+}
+
+.ai-metadata-check-button {
+  right: 34px;
+}
+
 .metadata-property.ai-metadata-enabled-row:hover > .ai-metadata-property-button,
+.metadata-property.ai-metadata-enabled-row:hover > .ai-metadata-check-button,
 .ai-metadata-property-button:focus-visible,
-.ai-metadata-property-button:hover {
+.ai-metadata-property-button:hover,
+.ai-metadata-check-button:focus-visible,
+.ai-metadata-check-button:hover {
   opacity: 1;
   color: var(--interactive-accent);
   background: var(--background-modifier-hover);
@@ -280,6 +294,17 @@
 
 .ai-metadata-result-file.is-error {
   color: var(--text-error);
+}
+
+.ai-metadata-result-detail {
+  padding: 1px 0 1px 14px;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  word-break: break-word;
+}
+
+.ai-metadata-result-detail.is-skipped {
+  color: var(--text-warning);
 }
 
 .ai-metadata-folder-actions {
